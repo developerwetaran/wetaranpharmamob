@@ -151,7 +151,7 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     const _LoginHero(),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 22),
+                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 70),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -548,7 +548,7 @@ class _LoginHero extends StatelessWidget {
       ),
       child: SizedBox(
         width: double.infinity,
-        height: 255,
+        height: 235,
         child: Stack(
           children: [
             Positioned.fill(
@@ -605,28 +605,14 @@ class _LoginHero extends StatelessWidget {
                         width: 58,
                         height: 58,
                         alignment: Alignment.center,
-                        decoration: BoxDecoration(
+                        child: ClipRRect(
                           borderRadius: BorderRadius.circular(18),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [teal500, teal600],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: teal500.withOpacity(0.20),
-                              blurRadius: 20,
-                              spreadRadius: 1,
-                              offset: const Offset(0, 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(0),
+                            child: Image.asset(
+                              'assets/images/WRxLogo_RX.webp',
+                              fit: BoxFit.contain,
                             ),
-                          ],
-                        ),
-                        child: const Text(
-                          'W',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
@@ -667,7 +653,7 @@ class _LoginHero extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 18),
                   const Text.rich(
                     TextSpan(
                       children: [
@@ -680,7 +666,7 @@ class _LoginHero extends StatelessWidget {
                           style: TextStyle(color: Color(0xFF19C3B3)),
                         ),
                         TextSpan(
-                          text: ' — in\none place.',
+                          text: ' — in one place.',
                           style: TextStyle(color: Colors.white),
                         ),
                       ],
@@ -691,9 +677,9 @@ class _LoginHero extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
                   const Text(
-                    'Live prices, schemes, delivery times and cashback for\nverified chemists.',
+                    'Live prices, schemes, delivery times and cashback for verified chemists.',
                     style: TextStyle(
                       fontSize: 14,
                       height: 1.5,

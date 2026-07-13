@@ -209,14 +209,9 @@ class AppDrawer extends StatelessWidget {
           Container(
             width: 42,
             height: 42,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white),
-            ),
+            padding: const EdgeInsets.all(0),
             child: Image.asset(
-              'assets/images/wetaran_pharma_logo.png',
+              'assets/images/WRxLogo_RX.webp',
               fit: BoxFit.contain,
             ),
           ),

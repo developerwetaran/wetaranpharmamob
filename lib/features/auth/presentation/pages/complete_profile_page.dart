@@ -603,16 +603,26 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
               _InputShell(
                 child: TextFormField(
                   controller: _businessAddressController,
-                  maxLines: 2,
+                  keyboardType: TextInputType.multiline,
+                  minLines: 2,
+                  maxLines: 4,
+                  textAlignVertical: TextAlignVertical.top,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                     color: ink,
                   ),
-                  decoration: _inputDecoration(
-                    hintText: 'Shop no., building, street',
-                    prefixIcon: Icons.home_work_outlined,
-                  ),
+                  decoration:
+                      _inputDecoration(
+                        hintText: 'Shop no., building, street',
+                        prefixIcon: Icons.home_work_outlined,
+                      ).copyWith(
+                        alignLabelWithHint: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 16,
+                        ),
+                      ),
                   validator: (value) {
                     if ((value ?? '').trim().isEmpty) {
                       return 'Please enter business address';
@@ -621,7 +631,6 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                   },
                 ),
               ),
-
               const SizedBox(height: 16),
 
               const _FieldLabel('CITY', requiredField: true),

@@ -1,8 +1,11 @@
 // lib/features/orders/presentation/pages/pharma_preview_order_page.dart
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:wetaran_pharma/features/distributors/presentation/pages/distributors_page.dart';
 import 'package:wetaran_pharma/features/orders/models/pharma_cart_provider.dart';
 import 'package:wetaran_pharma/features/orders/services/pharma_order_id_service.dart';
 
@@ -25,6 +28,12 @@ const _greenSoft = Color(0xFFEAF7EF);
 
 const _red = Color(0xFFDC2626);
 const _redSoft = Color(0xFFFEE2E2);
+
+const ink = Color(0xFF10233F);
+const inkSoft = Color(0xFF5B6B85);
+const teal50 = Color(0xFFE9FBF8);
+const teal600 = Color(0xFF0D9488);
+const Color teal500 = Color(0xFF14B8A6);
 
 class PharmaPreviewOrderPage extends StatefulWidget {
   final PharmaCartProvider cart;
@@ -57,17 +66,83 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
   String? _placedDistributorName;
   String? _placedOrderId;
 
+  double distributorMinimumOrderValue = 0;
+
+  String distributorExpectedDelivery = '';
+  String distributorSameDayCutoff = '';
+  bool distributorMetaLoading = false;
+
+  String get normalizedExpectedDelivery =>
+      distributorExpectedDelivery.trim().toLowerCase();
+
+  bool get isSameDayDelivery => normalizedExpectedDelivery == 'same_day';
+
+  bool get isNextDayDelivery => normalizedExpectedDelivery == 'next_day';
+
+  Timer? deliveryTimer;
+
   @override
   void initState() {
     super.initState();
     _loadPreviewId();
     _loadPharmaUserProfile();
+    _loadDistributorMeta();
+    deliveryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && showDeliveryTimerCard) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
+    deliveryTimer?.cancel();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadDistributorMeta() async {
+    final distributorId = widget.cart.lockedDistributorId;
+    if (distributorId == null || distributorId.isEmpty) return;
+
+    if (mounted) {
+      setState(() => distributorMetaLoading = true);
+    }
+
+    try {
+      final row = await _db
+          .from('distributor')
+          .select(
+            'pharma_minimum_order_value, pharma_expected_delivery, pharma_same_day_order_cutoff',
+          )
+          .eq('id', distributorId)
+          .maybeSingle();
+
+      if (!mounted || row == null) return;
+
+      final expected = (row['pharma_expected_delivery'] ?? '')
+          .toString()
+          .trim();
+      final cutoff = (row['pharma_same_day_order_cutoff'] ?? '')
+          .toString()
+          .trim();
+      final minValue =
+          (row['pharma_minimum_order_value'] as num?)?.toDouble() ?? 0.0;
+
+      setState(() {
+        distributorMinimumOrderValue = minValue;
+        distributorExpectedDelivery = expected;
+        distributorSameDayCutoff = cutoff;
+        distributorMetaLoading = false;
+      });
+
+      debugPrint('row expected => $expected');
+      debugPrint('row cutoff => $cutoff');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => distributorMetaLoading = false);
+      debugPrint('loadDistributorMeta error => $e');
+    }
   }
 
   Future<void> _loadPreviewId() async {
@@ -171,10 +246,113 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
   */
 
   DateTime getIndianTime() {
-    return DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+    final nowUtc = DateTime.now().toUtc();
+    return nowUtc.add(const Duration(hours: 5, minutes: 30));
+  }
+
+  TimeOfDay? parseCutoff(String value) {
+    final input = value
+        .replaceAll('\u00A0', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toUpperCase();
+    if (input.isEmpty) return null;
+
+    final match = RegExp(
+      r'^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$',
+    ).firstMatch(input);
+    if (match == null) {
+      debugPrint('parseCutoff FAILED for input: "$input"');
+      return null;
+    }
+
+    var hour = int.parse(match.group(1)!);
+    final minute = int.parse(match.group(2) ?? '0');
+    final period = match.group(3)!;
+
+    if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
+
+    if (hour == 12) hour = 0;
+    if (period == 'PM') hour += 12;
+
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  int get nowIstMinutes {
+    final nowUtc = DateTime.now().toUtc();
+    final nowIst = nowUtc.add(const Duration(hours: 5, minutes: 30));
+    return nowIst.hour * 60 + nowIst.minute;
+  }
+
+  bool get isBeforeSameDayCutoff {
+    if (!isSameDayDelivery) return false;
+
+    final cutoff = parseCutoff(distributorSameDayCutoff);
+    if (cutoff == null) return false;
+
+    final cutoffMinutes = cutoff.hour * 60 + cutoff.minute;
+    return nowIstMinutes <= cutoffMinutes;
+  }
+
+  String get deliveryHeadline {
+    if (isSameDayDelivery) {
+      return isBeforeSameDayCutoff ? 'Same day delivery' : 'Tomorrow delivery';
+    }
+
+    if (isNextDayDelivery) {
+      return 'Tomorrow delivery';
+    }
+
+    return '';
+  }
+
+  String get deliverySubtext {
+    if (!isSameDayDelivery) return '';
+    if (distributorSameDayCutoff.trim().isEmpty) return '';
+
+    return isBeforeSameDayCutoff
+        ? 'Order before $distributorSameDayCutoff'
+        : 'Today cutoff was $distributorSameDayCutoff. New orders will be delivered tomorrow.';
+  }
+
+  Duration? get timeLeftToCutoff {
+    if (!isSameDayDelivery) return null;
+
+    final cutoff = parseCutoff(distributorSameDayCutoff);
+    if (cutoff == null) return null;
+
+    final cutoffMinutes = cutoff.hour * 60 + cutoff.minute;
+    final diffMinutes = cutoffMinutes - nowIstMinutes;
+
+    if (diffMinutes <= 0) return Duration.zero;
+
+    final nowUtc = DateTime.now().toUtc();
+    final nowIst = nowUtc.add(const Duration(hours: 5, minutes: 30));
+    final secondsIntoCurrentMinute = nowIst.second;
+
+    final totalSeconds = (diffMinutes * 60) - secondsIntoCurrentMinute;
+    return Duration(seconds: totalSeconds < 0 ? 0 : totalSeconds);
+  }
+
+  bool get showDeliveryTimerCard =>
+      isSameDayDelivery && distributorSameDayCutoff.trim().isNotEmpty;
+
+  bool get meetsMinimumOrderValue {
+    return widget.cart.subtotal >= distributorMinimumOrderValue;
+  }
+
+  double get minimumOrderShortfall {
+    final diff = distributorMinimumOrderValue - widget.cart.subtotal;
+    return diff > 0 ? diff : 0;
   }
 
   Future<void> _placeOrder() async {
+    if (!meetsMinimumOrderValue) {
+      throw Exception(
+        'Minimum order value for this distributor is ₹${distributorMinimumOrderValue.toStringAsFixed(2)}. '
+        'Add ₹${minimumOrderShortfall.toStringAsFixed(2)} more to place the order.',
+      );
+    }
     if (_isPlacingOrder || _isSavingDraft) return;
 
     setState(() {
@@ -384,6 +562,73 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     );
   }
 
+  String formatDuration(Duration d) {
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60);
+    final seconds = d.inSeconds.remainder(60);
+
+    String two(int v) => v.toString().padLeft(2, '0');
+
+    if (hours > 0) {
+      return '${two(hours)}h ${two(minutes)}m ${two(seconds)}s';
+    }
+    return '${two(minutes)}m ${two(seconds)}s';
+  }
+
+  Widget buildDeliveryTimerCard() {
+    final beforeCutoff = isBeforeSameDayCutoff;
+    final left = timeLeftToCutoff;
+    debugPrint(
+      'beforeCutoff=$beforeCutoff left=$left cutoff="$distributorSameDayCutoff" '
+      'nowIstMinutes=$nowIstMinutes',
+    );
+    return _surfaceCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _leadingIconBox(
+            icon: beforeCutoff
+                ? Icons.timer_outlined
+                : Icons.local_shipping_outlined,
+            bg: teal50,
+            fg: teal600,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  beforeCutoff
+                      ? 'Same day delivery available'
+                      : 'Tomorrow delivery',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  beforeCutoff && left != null
+                      ? 'Order within ${formatDuration(left)} to get same day delivery.'
+                      : 'Today’s cutoff was $distributorSameDayCutoff. New orders will be delivered tomorrow.',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: inkSoft,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cart = widget.cart;
@@ -401,6 +646,10 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                   _buildOrderIdCard(),
                   const SizedBox(height: 14),
                   _buildDistributorCard(cart),
+                  if (showDeliveryTimerCard) ...[
+                    const SizedBox(height: 12),
+                    buildDeliveryTimerCard(),
+                  ],
                   const SizedBox(height: 14),
                   _buildItemsCard(cart),
                   const SizedBox(height: 14),
@@ -536,7 +785,7 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                 'DISTRIBUTOR',
                 style: TextStyle(
                   fontSize: 11,
-                  color: _inkSoft,
+                  color: inkSoft,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.35,
                 ),
@@ -549,9 +798,36 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
-                  color: _ink,
+                  color: ink,
                 ),
               ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  metaInfoChip(
+                    icon: Icons.currency_rupee_rounded,
+                    text: distributorMinimumOrderValue > 0
+                        ? 'Min order ₹${distributorMinimumOrderValue.toStringAsFixed(0)}'
+                        : 'No minimum order',
+                    bg: meetsMinimumOrderValue ? teal50 : redSoft,
+                    fg: meetsMinimumOrderValue ? teal600 : red,
+                  ),
+                ],
+              ),
+              if (!meetsMinimumOrderValue &&
+                  distributorMinimumOrderValue > 0) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Add ₹${minimumOrderShortfall.toStringAsFixed(2)} more to place this order.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: red,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -832,6 +1108,8 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
   );
 
   Widget _buildBottomBar(PharmaCartProvider cart) {
+    final disablePlaceOrder =
+        _isPlacingOrder || _isSavingDraft || !meetsMinimumOrderValue;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 26),
       decoration: const BoxDecoration(
@@ -885,23 +1163,25 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  colors: [_teal500, _teal600],
+                gradient: LinearGradient(
+                  colors: disablePlaceOrder
+                      ? [inkSoft.withOpacity(0.55), inkSoft.withOpacity(0.40)]
+                      : [teal500, teal600],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: _teal500.withOpacity(0.22),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+                boxShadow: disablePlaceOrder
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: teal500.withOpacity(0.22),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
               ),
               child: FilledButton.icon(
-                onPressed: _isPlacingOrder || _isSavingDraft
-                    ? null
-                    : _placeOrder,
+                onPressed: disablePlaceOrder ? null : _placeOrder,
                 icon: _isPlacingOrder
                     ? const SizedBox(
                         width: 16,
@@ -911,15 +1191,21 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.check_circle_outline_rounded,
                         size: 18,
-                        color: Colors.white,
+                        color: disablePlaceOrder
+                            ? Colors.white.withOpacity(0.92)
+                            : Colors.white,
                       ),
-                label: const Text(
-                  'Place Order',
+                label: Text(
+                  !meetsMinimumOrderValue && distributorMinimumOrderValue > 0
+                      ? 'Min order value not met'
+                      : 'Place Order',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: disablePlaceOrder
+                        ? Colors.white.withOpacity(0.92)
+                        : Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
                   ),
@@ -975,4 +1261,34 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
       child: Icon(icon, color: fg, size: 20),
     );
   }
+}
+
+Widget metaInfoChip({
+  required IconData icon,
+  required String text,
+  required Color bg,
+  required Color fg,
+}) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: fg),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: fg,
+          ),
+        ),
+      ],
+    ),
+  );
 }

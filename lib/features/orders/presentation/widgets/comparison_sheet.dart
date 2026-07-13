@@ -110,130 +110,133 @@ class _DistributorComparisonDialog extends StatelessWidget {
     return Center(
       child: Material(
         color: Colors.transparent,
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.94,
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.80,
-          ),
-          decoration: BoxDecoration(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.94,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.84,
+            ),
             color: _pageBg,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Consumer<PharmaCartProvider>(
-            builder: (context, cart, _) {
-              return Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 12, 14),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(24),
+            child: Consumer<PharmaCartProvider>(
+              builder: (context, cart, _) {
+                return Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 12, 14),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        border: Border(bottom: BorderSide(color: _border)),
                       ),
-                      border: Border(bottom: BorderSide(color: _border)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: _blueSoft,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.compare_arrows_rounded,
-                            size: 19,
-                            color: _blue,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Compare distributors',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: _heading,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: _muted,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 34,
-                            height: 34,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: _border),
+                              color: _blueSoft,
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: _heading,
+                              Icons.compare_arrows_rounded,
+                              size: 19,
+                              color: _blue,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: sortedOffers.isEmpty
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(24),
-                              child: Text(
-                                'No distributor offers available for this medicine.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _muted,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Compare distributors',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: _heading,
+                                  ),
                                 ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _muted,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: _border),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: _heading,
                               ),
                             ),
-                          )
-                        : ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                            itemCount: offers.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (_, i) {
-                              final offer = sortedOffers[i];
-                              return _DistributorOfferTile(
-                                offer: offer,
-                                isCheapest: i == 0,
-                                cart: cart,
-                                onAddOffer: onAddOffer,
-                                onSwitchDistributor: onSwitchDistributor,
-                              );
-                            },
                           ),
-                  ),
-                ],
-              );
-            },
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: sortedOffers.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Text(
+                                  'No distributor offers available for this medicine.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: _muted,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(
+                                12,
+                                12,
+                                12,
+                                16,
+                              ),
+                              itemCount: sortedOffers.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (_, i) {
+                                final offer = sortedOffers[i];
+                                return _DistributorOfferTile(
+                                  offer: offer,
+                                  isCheapest: i == 0,
+                                  cart: cart,
+                                  onAddOffer: onAddOffer,
+                                  onSwitchDistributor: onSwitchDistributor,
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
