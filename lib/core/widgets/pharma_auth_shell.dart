@@ -348,7 +348,7 @@ class SignupProgress extends StatelessWidget {
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 8.5,
               height: 1.2,
               fontWeight: FontWeight.w600,
               color: isActive || isDone ? teal500 : inkSoft,

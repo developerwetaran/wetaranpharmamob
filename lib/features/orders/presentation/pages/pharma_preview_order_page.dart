@@ -5,7 +5,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:wetaran_pharma/features/distributors/presentation/pages/distributors_page.dart';
 import 'package:wetaran_pharma/features/orders/models/pharma_cart_provider.dart';
 import 'package:wetaran_pharma/features/orders/services/pharma_order_id_service.dart';
 
@@ -29,11 +28,41 @@ const _greenSoft = Color(0xFFEAF7EF);
 const _red = Color(0xFFDC2626);
 const _redSoft = Color(0xFFFEE2E2);
 
-const ink = Color(0xFF10233F);
-const inkSoft = Color(0xFF5B6B85);
-const teal50 = Color(0xFFE9FBF8);
-const teal600 = Color(0xFF0D9488);
-const Color teal500 = Color(0xFF14B8A6);
+const _amber = Color(0xFFB45309);
+const _amberSoft = Color(0xFFFFF7ED);
+const _headingColor = Color(0xFF13242F);
+const _mutedColor = Color(0xFF63788A);
+const _faintColor = Color(0xFF93A6B5);
+const _borderColor = Color(0xFFE3EBF1);
+const _pageBg = Color(0xFFF3F7FA);
+
+const _blue = Color(0xFF0B4F8A);
+
+class DistributorOrderGroup {
+  final String distributorId;
+  final String distributorName;
+  final List<PharmaCartItem> items;
+  final String orderId;
+  final double subtotal;
+  final double minimumOrderValue;
+  final String expectedDelivery;
+  final String sameDayCutoff;
+
+  DistributorOrderGroup({
+    required this.distributorId,
+    required this.distributorName,
+    required this.items,
+    required this.orderId,
+    required this.subtotal,
+    required this.minimumOrderValue,
+    required this.expectedDelivery,
+    required this.sameDayCutoff,
+  });
+
+  bool get meetsMOV => subtotal >= minimumOrderValue;
+
+  double get shortfall => meetsMOV ? 0 : (minimumOrderValue - subtotal);
+}
 
 class PharmaPreviewOrderPage extends StatefulWidget {
   final PharmaCartProvider cart;
@@ -41,7 +70,7 @@ class PharmaPreviewOrderPage extends StatefulWidget {
   const PharmaPreviewOrderPage({super.key, required this.cart});
 
   @override
-  State<PharmaPreviewOrderPage> createState() => _PharmaPreviewOrderPageState();
+  State createState() => _PharmaPreviewOrderPageState();
 }
 
 class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
@@ -52,9 +81,7 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
   bool _isSavingDraft = false;
   String? _errorMsg;
 
-  String _previewOrderId = '';
   String? _pharmaUserId;
-
   String? _customerName;
   String? _billingAddress;
   String? _phoneNumber;
@@ -62,35 +89,22 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
   String? _businessState;
   String? _businessCity;
   String? _businessPincode;
-  String? _placedDistributorId;
-  String? _placedDistributorName;
-  String? _placedOrderId;
 
-  double distributorMinimumOrderValue = 0;
-
-  String distributorExpectedDelivery = '';
-  String distributorSameDayCutoff = '';
-  bool distributorMetaLoading = false;
-
-  String get normalizedExpectedDelivery =>
-      distributorExpectedDelivery.trim().toLowerCase();
-
-  bool get isSameDayDelivery => normalizedExpectedDelivery == 'same_day';
-
-  bool get isNextDayDelivery => normalizedExpectedDelivery == 'next_day';
+  final Map<String, double> _minOrderMap = {};
+  final Map<String, String> _deliveryMap = {};
+  final Map<String, String> _cutoffMap = {};
+  final Map<String, String> _orderIdMap = {};
+  bool _loadingGroupMeta = true;
 
   Timer? deliveryTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadPreviewId();
     _loadPharmaUserProfile();
-    _loadDistributorMeta();
+    _initOrderGroups();
     deliveryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && showDeliveryTimerCard) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     });
   }
 
@@ -99,67 +113,6 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     deliveryTimer?.cancel();
     _notesCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadDistributorMeta() async {
-    final distributorId = widget.cart.lockedDistributorId;
-    if (distributorId == null || distributorId.isEmpty) return;
-
-    if (mounted) {
-      setState(() => distributorMetaLoading = true);
-    }
-
-    try {
-      final row = await _db
-          .from('distributor')
-          .select(
-            'pharma_minimum_order_value, pharma_expected_delivery, pharma_same_day_order_cutoff',
-          )
-          .eq('id', distributorId)
-          .maybeSingle();
-
-      if (!mounted || row == null) return;
-
-      final expected = (row['pharma_expected_delivery'] ?? '')
-          .toString()
-          .trim();
-      final cutoff = (row['pharma_same_day_order_cutoff'] ?? '')
-          .toString()
-          .trim();
-      final minValue =
-          (row['pharma_minimum_order_value'] as num?)?.toDouble() ?? 0.0;
-
-      setState(() {
-        distributorMinimumOrderValue = minValue;
-        distributorExpectedDelivery = expected;
-        distributorSameDayCutoff = cutoff;
-        distributorMetaLoading = false;
-      });
-
-      debugPrint('row expected => $expected');
-      debugPrint('row cutoff => $cutoff');
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => distributorMetaLoading = false);
-      debugPrint('loadDistributorMeta error => $e');
-    }
-  }
-
-  Future<void> _loadPreviewId() async {
-    final distributorId = widget.cart.lockedDistributorId;
-
-    if (distributorId == null || distributorId.isEmpty) {
-      if (!mounted) return;
-      setState(() => _previewOrderId = '0001');
-      return;
-    }
-
-    await PharmaOrderIdService.setActiveDistributor(distributorId);
-
-    if (!mounted) return;
-    setState(() {
-      _previewOrderId = PharmaOrderIdService.previewNextOrderId;
-    });
   }
 
   Future<void> _loadPharmaUserProfile() async {
@@ -197,53 +150,101 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     } catch (_) {}
   }
 
-  /*
-  Future<void> _saveDraft() async {
-    if (_isSavingDraft || _isPlacingOrder) return;
-
-    setState(() {
-      _isSavingDraft = true;
-      _errorMsg = null;
-    });
-
-    try {
-      final distributorId = widget.cart.lockedDistributorId;
-      if (distributorId == null) throw Exception('No distributor selected');
-
-      final products = widget.cart.items
-          .map((i) => i.toOrderProduct())
-          .toList();
-      final totalAmount = widget.cart.subtotal;
-
-      await _db.from('orders').insert({
-        'distributor_id': distributorId,
-        'retailer_id': _pharmaUserId,
-        'total_amount': totalAmount,
-        'order_price': products
-            .map((p) => '${p['name']}: ${p['quantity']} × ₹${p['sell_price']}')
-            .join(', '),
-        'products': products,
-        'notes': _notesCtrl.text.trim(),
-        'status': 'draft',
-        'status_updated_at': DateTime.now().toIso8601String(),
-      });
-
+  Future<void> _initOrderGroups() async {
+    final groups = _buildGroups(widget.cart.items);
+    if (groups.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Draft saved successfully'),
-          backgroundColor: _green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _errorMsg = 'Failed to save draft: $e');
-    } finally {
-      if (mounted) setState(() => _isSavingDraft = false);
+      setState(() => _loadingGroupMeta = false);
+      return;
     }
+
+    final distributorIds = groups.map((e) => e.distributorId).toList();
+    await PharmaOrderIdService.initForDistributors(distributorIds);
+
+    final futures = groups.map((g) async {
+      final row = await _db
+          .from('distributor')
+          .select(
+            'pharma_minimum_order_value, pharma_expected_delivery, pharma_same_day_order_cutoff',
+          )
+          .eq('id', g.distributorId)
+          .maybeSingle();
+
+      final minValue =
+          (row?['pharma_minimum_order_value'] as num?)?.toDouble() ?? 0.0;
+      final delivery = (row?['pharma_expected_delivery'] ?? '')
+          .toString()
+          .trim();
+      final cutoff = (row?['pharma_same_day_order_cutoff'] ?? '')
+          .toString()
+          .trim();
+
+      return {
+        'id': g.distributorId,
+        'min': minValue,
+        'delivery': delivery,
+        'cutoff': cutoff,
+      };
+    }).toList();
+
+    final results = await Future.wait(futures);
+
+    for (final r in results) {
+      final id = r['id'] as String;
+      _minOrderMap[id] = r['min'] as double;
+      _deliveryMap[id] = r['delivery'] as String;
+      _cutoffMap[id] = r['cutoff'] as String;
+    }
+
+    final idsToReserve = groups.map((e) => e.distributorId).toList();
+    final reserved = <String, String>{};
+
+    for (final distId in idsToReserve) {
+      await PharmaOrderIdService.setActiveDistributor(distId);
+      final nextId = PharmaOrderIdService.previewNextOrderId;
+      reserved[distId] = nextId;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _orderIdMap.addAll(reserved);
+      _loadingGroupMeta = false;
+    });
   }
-  */
+
+  List<DistributorOrderGroup> _buildGroups(List<PharmaCartItem> items) {
+    final map = <String, List<PharmaCartItem>>{};
+    for (final item in items) {
+      map.putIfAbsent(item.distributorId, () => []);
+      map[item.distributorId]!.add(item);
+    }
+
+    final groups = map.entries.map((entry) {
+      final distributorId = entry.key;
+      final groupItems = entry.value;
+      final distributorName = groupItems.isNotEmpty
+          ? groupItems.first.distributorName
+          : 'Unknown distributor';
+      final subtotal = groupItems.fold<double>(
+        0,
+        (sum, i) => sum + i.totalPrice,
+      );
+
+      return DistributorOrderGroup(
+        distributorId: distributorId,
+        distributorName: distributorName,
+        items: groupItems,
+        orderId: _orderIdMap[distributorId] ?? 'Loading...',
+        subtotal: subtotal,
+        minimumOrderValue: _minOrderMap[distributorId] ?? 0.0,
+        expectedDelivery: _deliveryMap[distributorId] ?? '',
+        sameDayCutoff: _cutoffMap[distributorId] ?? '',
+      );
+    }).toList();
+
+    groups.sort((a, b) => a.distributorName.compareTo(b.distributorName));
+    return groups;
+  }
 
   DateTime getIndianTime() {
     final nowUtc = DateTime.now().toUtc();
@@ -261,16 +262,11 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     final match = RegExp(
       r'^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$',
     ).firstMatch(input);
-    if (match == null) {
-      debugPrint('parseCutoff FAILED for input: "$input"');
-      return null;
-    }
+    if (match == null) return null;
 
     var hour = int.parse(match.group(1)!);
     final minute = int.parse(match.group(2) ?? '0');
     final period = match.group(3)!;
-
-    if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
 
     if (hour == 12) hour = 0;
     if (period == 'PM') hour += 12;
@@ -284,76 +280,49 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     return nowIst.hour * 60 + nowIst.minute;
   }
 
-  bool get isBeforeSameDayCutoff {
-    if (!isSameDayDelivery) return false;
-
-    final cutoff = parseCutoff(distributorSameDayCutoff);
-    if (cutoff == null) return false;
-
-    final cutoffMinutes = cutoff.hour * 60 + cutoff.minute;
-    return nowIstMinutes <= cutoffMinutes;
+  bool _isBeforeCutoff(String cutoff) {
+    final t = parseCutoff(cutoff);
+    if (t == null) return false;
+    return nowIstMinutes <= (t.hour * 60 + t.minute);
   }
 
-  String get deliveryHeadline {
-    if (isSameDayDelivery) {
-      return isBeforeSameDayCutoff ? 'Same day delivery' : 'Tomorrow delivery';
-    }
+  Duration? _timeLeftToCutoff(String cutoff) {
+    final t = parseCutoff(cutoff);
+    if (t == null) return null;
 
-    if (isNextDayDelivery) {
-      return 'Tomorrow delivery';
-    }
-
-    return '';
-  }
-
-  String get deliverySubtext {
-    if (!isSameDayDelivery) return '';
-    if (distributorSameDayCutoff.trim().isEmpty) return '';
-
-    return isBeforeSameDayCutoff
-        ? 'Order before $distributorSameDayCutoff'
-        : 'Today cutoff was $distributorSameDayCutoff. New orders will be delivered tomorrow.';
-  }
-
-  Duration? get timeLeftToCutoff {
-    if (!isSameDayDelivery) return null;
-
-    final cutoff = parseCutoff(distributorSameDayCutoff);
-    if (cutoff == null) return null;
-
-    final cutoffMinutes = cutoff.hour * 60 + cutoff.minute;
+    final cutoffMinutes = t.hour * 60 + t.minute;
     final diffMinutes = cutoffMinutes - nowIstMinutes;
-
     if (diffMinutes <= 0) return Duration.zero;
 
     final nowUtc = DateTime.now().toUtc();
     final nowIst = nowUtc.add(const Duration(hours: 5, minutes: 30));
     final secondsIntoCurrentMinute = nowIst.second;
-
     final totalSeconds = (diffMinutes * 60) - secondsIntoCurrentMinute;
     return Duration(seconds: totalSeconds < 0 ? 0 : totalSeconds);
   }
 
-  bool get showDeliveryTimerCard =>
-      isSameDayDelivery && distributorSameDayCutoff.trim().isNotEmpty;
-
-  bool get meetsMinimumOrderValue {
-    return widget.cart.subtotal >= distributorMinimumOrderValue;
-  }
-
-  double get minimumOrderShortfall {
-    final diff = distributorMinimumOrderValue - widget.cart.subtotal;
-    return diff > 0 ? diff : 0;
+  bool get _allMeetMOV {
+    final groups = _buildGroups(widget.cart.items);
+    return groups.every(
+      (g) => (g.subtotal) >= (_minOrderMap[g.distributorId] ?? 0.0),
+    );
   }
 
   Future<void> _placeOrder() async {
-    if (!meetsMinimumOrderValue) {
-      throw Exception(
-        'Minimum order value for this distributor is ₹${distributorMinimumOrderValue.toStringAsFixed(2)}. '
-        'Add ₹${minimumOrderShortfall.toStringAsFixed(2)} more to place the order.',
-      );
-    }
     if (_isPlacingOrder || _isSavingDraft) return;
+    if (_pharmaUserId == null) throw Exception('User profile not loaded');
+
+    final groups = _buildGroups(widget.cart.items);
+    final blocked = groups.where((g) => !g.meetsMOV).toList();
+    if (blocked.isNotEmpty) {
+      final msg = blocked
+          .map(
+            (g) =>
+                '${g.distributorName}: short by ₹${g.shortfall.toStringAsFixed(2)}',
+          )
+          .join('\n');
+      throw Exception('Minimum order value not met for:\n$msg');
+    }
 
     setState(() {
       _isPlacingOrder = true;
@@ -361,184 +330,131 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     });
 
     try {
-      final distributorId = widget.cart.lockedDistributorId;
-      final distributorName = widget.cart.lockedDistributorName;
+      final inserts = await Future.wait(
+        groups.map((g) async {
+          final distributorId = g.distributorId;
+          await PharmaOrderIdService.setActiveDistributor(distributorId);
+          final orderId = await PharmaOrderIdService.reserveNextOrderId();
 
-      if (distributorId == null) throw Exception('No distributor selected');
-      if (_pharmaUserId == null) throw Exception('User profile not loaded');
+          final products = g.items.map((i) => i.toOrderProduct()).toList();
+          final totalAmount = g.subtotal;
 
-      await PharmaOrderIdService.setActiveDistributor(distributorId);
-      final orderId = await PharmaOrderIdService.reserveNextOrderId();
+          final inserted = await _db
+              .from('orders')
+              .insert({
+                'order_id': orderId,
+                'distributor_id': distributorId,
+                'pharma_user_id': _pharmaUserId,
+                'customer_name': _customerName,
+                'billing_address': _billingAddress,
+                'phone_number': _phoneNumber,
+                'user_name': _userName ?? _customerName,
+                'total_amount': totalAmount,
+                'products': products,
+                'notes': _notesCtrl.text.trim(),
+                'status': 'booked',
+                'business_state': _businessState,
+                'business_city': _businessCity,
+                'business_pincode': _businessPincode,
+                'status_updated_at': DateTime.now().toIso8601String(),
+                'order_date': getIndianTime().toIso8601String(),
+              })
+              .select('id, order_id')
+              .single();
 
-      final products = widget.cart.items
-          .map((i) => i.toOrderProduct())
-          .toList();
-      final totalAmount = widget.cart.subtotal;
+          final savedOrderId = inserted['order_id'] as String? ?? orderId;
+          await PharmaOrderIdService.onOrderSaved(savedOrderId);
 
-      final inserted = await _db
-          .from('orders')
-          .insert({
-            'order_id': orderId,
-            'distributor_id': distributorId,
-            'pharma_user_id': _pharmaUserId,
-            'customer_name': _customerName,
-            'billing_address': _billingAddress,
-            'phone_number': _phoneNumber,
-            'user_name': _userName ?? _customerName,
-            'total_amount': totalAmount,
-            'products': products,
-            'notes': _notesCtrl.text.trim(),
-            'status': 'booked',
-            'business_state': _businessState,
-            'business_city': _businessCity,
-            'business_pincode': _businessPincode,
-            'status_updated_at': DateTime.now().toIso8601String(),
-            'order_date': getIndianTime().toIso8601String(),
-          })
-          .select('id, order_id')
-          .single();
-
-      final savedOrderId = inserted['order_id'] as String? ?? orderId;
-
-      await PharmaOrderIdService.onOrderSaved(savedOrderId);
+          return {
+            'distributorId': distributorId,
+            'distributorName': g.distributorName,
+            'orderId': savedOrderId,
+          };
+        }),
+      );
 
       if (!mounted) return;
-
-      setState(() {
-        _placedDistributorId = distributorId;
-        _placedDistributorName = distributorName;
-        _placedOrderId = savedOrderId;
-        _previewOrderId = savedOrderId;
-      });
-
       widget.cart.clear();
-      _notesCtrl.clear();
 
-      _showSuccessDialog(savedOrderId);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _errorMsg = 'Failed to place order: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isPlacingOrder = false);
-      }
-    }
-  }
-
-  void _showSuccessDialog(String orderId) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.45),
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 22),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: _card,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x220A2451),
-                blurRadius: 28,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: _greenSoft,
-                  borderRadius: BorderRadius.circular(22),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withOpacity(0.45),
+        builder: (_) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x220A2451),
+                  blurRadius: 28,
+                  offset: Offset(0, 10),
                 ),
-                child: const Icon(
-                  Icons.check_circle_outline_rounded,
-                  color: _green,
-                  size: 36,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: _greenSoft,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_outline_rounded,
+                    color: _green,
+                    size: 36,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Order Placed!',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: _ink,
+                const SizedBox(height: 18),
+                const Text(
+                  'Orders Placed!',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your order $orderId has been placed successfully.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: _inkSoft,
-                  height: 1.5,
-                  fontWeight: FontWeight.w500,
+                const SizedBox(height: 8),
+                Text(
+                  'Your orders have been placed successfully.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: _inkSoft,
+                    height: 1.5,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
-                ),
-                decoration: BoxDecoration(
-                  color: _teal50,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFC7EFE9)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.receipt_long_rounded,
-                      size: 17,
-                      color: _teal600,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Order ID: $orderId',
+                const SizedBox(height: 16),
+                ...inserts.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '${e['distributorName']}: ${e['orderId']}',
                       style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
                         color: _teal600,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: const LinearGradient(
-                      colors: [_teal500, _teal600],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _teal500.withOpacity(0.22),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
                   ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
                   child: FilledButton(
                     onPressed: () {
                       Navigator.of(context).popUntil((route) => route.isFirst);
                     },
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
+                      backgroundColor: _teal600,
                       minimumSize: const Size.fromHeight(52),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -554,12 +470,19 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMsg = 'Failed to place order: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isPlacingOrder = false);
+      }
+    }
   }
 
   String formatDuration(Duration d) {
@@ -575,63 +498,9 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     return '${two(minutes)}m ${two(seconds)}s';
   }
 
-  Widget buildDeliveryTimerCard() {
-    final beforeCutoff = isBeforeSameDayCutoff;
-    final left = timeLeftToCutoff;
-    debugPrint(
-      'beforeCutoff=$beforeCutoff left=$left cutoff="$distributorSameDayCutoff" '
-      'nowIstMinutes=$nowIstMinutes',
-    );
-    return _surfaceCard(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _leadingIconBox(
-            icon: beforeCutoff
-                ? Icons.timer_outlined
-                : Icons.local_shipping_outlined,
-            bg: teal50,
-            fg: teal600,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  beforeCutoff
-                      ? 'Same day delivery available'
-                      : 'Tomorrow delivery',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  beforeCutoff && left != null
-                      ? 'Order within ${formatDuration(left)} to get same day delivery.'
-                      : 'Today’s cutoff was $distributorSameDayCutoff. New orders will be delivered tomorrow.',
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: inkSoft,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final cart = widget.cart;
+    final groups = _buildGroups(widget.cart.items);
 
     return Scaffold(
       appBar: buildHeroAppBar(),
@@ -643,19 +512,17 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
                 children: [
-                  _buildOrderIdCard(),
+                  _buildOverviewCard(groups),
                   const SizedBox(height: 14),
-                  _buildDistributorCard(cart),
-                  if (showDeliveryTimerCard) ...[
-                    const SizedBox(height: 12),
-                    buildDeliveryTimerCard(),
-                  ],
-                  const SizedBox(height: 14),
-                  _buildItemsCard(cart),
-                  const SizedBox(height: 14),
+                  ...groups.expand(
+                    (group) => [
+                      _buildDistributorGroupCard(group),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
                   _buildNotesCard(),
                   const SizedBox(height: 14),
-                  _buildSummaryCard(cart),
+                  _buildSummaryCard(groups),
                   if (_errorMsg != null) ...[
                     const SizedBox(height: 12),
                     _buildErrorCard(),
@@ -666,7 +533,7 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomBar(cart),
+      bottomNavigationBar: _buildBottomBar(groups),
     );
   }
 
@@ -710,180 +577,213 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     );
   }
 
-  Widget _buildOrderIdCard() => _surfaceCard(
-    padding: const EdgeInsets.all(16),
-    child: Row(
-      children: [
-        _leadingIconBox(
-          icon: Icons.receipt_long_rounded,
-          bg: _teal50,
-          fg: _teal600,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'ORDER ID',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: _inkSoft,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.35,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                (_placedOrderId ?? _previewOrderId).isNotEmpty
-                    ? (_placedOrderId ?? _previewOrderId)
-                    : 'Loading...',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: _ink,
-                ),
-              ),
-            ],
+  Widget _buildOverviewCard(List<DistributorOrderGroup> groups) {
+    final allMeet = groups.every((g) => g.meetsMOV);
+
+    return _surfaceCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          _leadingIconBox(
+            icon: Icons.receipt_long_rounded,
+            bg: _teal50,
+            fg: _teal600,
           ),
-        ),
-        /*
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: _teal50,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: const Text(
-            'Preview',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: _teal600,
-            ),
-          ),
-        ),
-        */
-      ],
-    ),
-  );
-  Widget _buildDistributorCard(PharmaCartProvider cart) => _surfaceCard(
-    padding: const EdgeInsets.all(16),
-    child: Row(
-      children: [
-        _leadingIconBox(
-          icon: Icons.storefront_outlined,
-          bg: _greenSoft,
-          fg: _green,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'DISTRIBUTOR',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: inkSoft,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.35,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _placedDistributorName ??
-                    cart.lockedDistributorName ??
-                    'Unknown distributor',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: ink,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  metaInfoChip(
-                    icon: Icons.currency_rupee_rounded,
-                    text: distributorMinimumOrderValue > 0
-                        ? 'Min order ₹${distributorMinimumOrderValue.toStringAsFixed(0)}'
-                        : 'No minimum order',
-                    bg: meetsMinimumOrderValue ? teal50 : redSoft,
-                    fg: meetsMinimumOrderValue ? teal600 : red,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ORDER SUMMARY',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _inkSoft,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.35,
                   ),
-                ],
-              ),
-              if (!meetsMinimumOrderValue &&
-                  distributorMinimumOrderValue > 0) ...[
-                const SizedBox(height: 10),
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  'Add ₹${minimumOrderShortfall.toStringAsFixed(2)} more to place this order.',
+                  '${groups.length} distributor order${groups.length == 1 ? '' : 's'}',
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: red,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  allMeet
+                      ? 'All distributor orders meet MOV.'
+                      : 'Some distributor orders are below MOV.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: allMeet ? _green : _red,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
-            ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
-  Widget _buildItemsCard(PharmaCartProvider cart) => _surfaceCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-          child: Row(
-            children: [
-              const Text(
-                'Order Items',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: _ink,
+  Widget _buildDistributorGroupCard(DistributorOrderGroup group) {
+    final beforeCutoff = _isBeforeCutoff(group.sameDayCutoff);
+    final left = _timeLeftToCutoff(group.sameDayCutoff);
+
+    return _surfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: _line)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _leadingIconBox(
+                  icon: Icons.storefront_outlined,
+                  bg: _greenSoft,
+                  fg: _green,
                 ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _teal50,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: _teal600,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Order ${_buildGroups(widget.cart.items).indexWhere((g) => g.distributorId == group.distributorId) + 1}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _inkSoft,
+                          letterSpacing: 0.25,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        group.distributorName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: _ink,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          metaInfoChip(
+                            icon: Icons.receipt_long_rounded,
+                            text: group.orderId,
+                            bg: _teal50,
+                            fg: _teal600,
+                          ),
+                          metaInfoChip(
+                            icon: Icons.currency_rupee_rounded,
+                            text: group.minimumOrderValue > 0
+                                ? 'MOV ₹${group.minimumOrderValue.toStringAsFixed(0)}'
+                                : 'No MOV',
+                            bg: group.meetsMOV ? _teal50 : _redSoft,
+                            fg: group.meetsMOV ? _teal600 : _red,
+                          ),
+                          metaInfoChip(
+                            icon: beforeCutoff
+                                ? Icons.timer_outlined
+                                : Icons.local_shipping_outlined,
+                            text: group.expectedDelivery.trim().isEmpty
+                                ? 'Delivery info unavailable'
+                                : (beforeCutoff ? 'Same day' : 'Tomorrow'),
+                            bg: _amberSoft,
+                            fg: _amber,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const Divider(height: 1, color: _line),
-        ...cart.items.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final item = entry.value;
-          return _buildItemRow(item, isLast: idx == cart.items.length - 1);
-        }),
-      ],
-    ),
-  );
+          if (group.sameDayCutoff.trim().isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Text(
+                beforeCutoff && left != null
+                    ? 'Order within ${formatDuration(left)} for same day delivery.'
+                    : 'Today’s cutoff was ${group.sameDayCutoff}. New orders will be delivered tomorrow.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: _inkSoft,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          ...group.items.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final item = entry.value;
+            return _buildItemRow(item, isLast: idx == group.items.length - 1);
+          }),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Distributor subtotal',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: group.meetsMOV ? _green : _red,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  '₹${group.subtotal.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: group.meetsMOV ? _teal600 : _red,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!group.meetsMOV && group.minimumOrderValue > 0)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _redSoft,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                'Add ₹${group.shortfall.toStringAsFixed(2)} more to place this order.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: _red,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildItemRow(PharmaCartItem item, {bool isLast = false}) {
+    final qty = item.quantity;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -923,8 +823,7 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                     height: 1.3,
                   ),
                 ),
-                if (item.genericName != null &&
-                    item.genericName!.isNotEmpty) ...[
+                if ((item.genericName ?? '').isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(
                     item.genericName!,
@@ -937,12 +836,96 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                 ],
                 const SizedBox(height: 6),
                 Text(
-                  '${item.quantity} × ₹${item.pricePerUnit.toStringAsFixed(2)} / ${item.unit}',
+                  '${item.pricePerUnit.toStringAsFixed(2)} / ${item.unit}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: _inkSoft,
                     fontWeight: FontWeight.w600,
                   ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: _pageBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _borderColor),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _stepBtn(
+                            icon: Icons.remove_rounded,
+                            onTap: qty <= 1
+                                ? null
+                                : () {
+                                    widget.cart.updateQuantity(
+                                      item.variantId,
+                                      item.unit,
+                                      qty - 1,
+                                    );
+                                    setState(() {});
+                                  },
+                          ),
+                          SizedBox(
+                            width: 42,
+                            height: 32,
+                            child: Center(
+                              child: Text(
+                                '$qty',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: _headingColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                          _stepBtn(
+                            icon: Icons.add_rounded,
+                            color: _blue,
+                            onTap: () {
+                              widget.cart.updateQuantity(
+                                item.variantId,
+                                item.unit,
+                                qty + 1,
+                              );
+                              setState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '× ₹${item.pricePerUnit.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 10.8,
+                        color: _mutedColor,
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () {
+                        widget.cart.removeItem(item.variantId, item.unit);
+                        setState(() {});
+                      },
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: _redSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 17,
+                          color: _red,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -957,6 +940,22 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _stepBtn({
+    required IconData icon,
+    Color color = _mutedColor,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 32,
+        alignment: Alignment.center,
+        child: Icon(icon, size: 17, color: onTap == null ? _faintColor : color),
       ),
     );
   }
@@ -1000,7 +999,7 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                 fontWeight: FontWeight.w500,
               ),
               decoration: const InputDecoration(
-                hintText: 'Add special instructions or notes for this order…',
+                hintText: 'Add special instructions or notes for these orders…',
                 hintStyle: TextStyle(
                   fontSize: 13.5,
                   color: _inkFaint,
@@ -1016,13 +1015,13 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     ),
   );
 
-  Widget _buildSummaryCard(PharmaCartProvider cart) => _surfaceCard(
+  Widget _buildSummaryCard(List<DistributorOrderGroup> groups) => _surfaceCard(
     padding: const EdgeInsets.all(16),
     child: Column(
       children: [
         _summaryRow(
-          'Subtotal (${cart.itemCount} items)',
-          '₹${cart.subtotal.toStringAsFixed(2)}',
+          'Orders (${groups.length})',
+          '₹${widget.cart.subtotal.toStringAsFixed(2)}',
         ),
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 12),
@@ -1040,7 +1039,7 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
               ),
             ),
             Text(
-              '₹${cart.subtotal.toStringAsFixed(2)}',
+              '₹${widget.cart.subtotal.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w900,
@@ -1107,9 +1106,10 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
     ),
   );
 
-  Widget _buildBottomBar(PharmaCartProvider cart) {
+  Widget _buildBottomBar(List<DistributorOrderGroup> groups) {
     final disablePlaceOrder =
-        _isPlacingOrder || _isSavingDraft || !meetsMinimumOrderValue;
+        _isPlacingOrder || _isSavingDraft || !_allMeetMOV || _loadingGroupMeta;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 26),
       decoration: const BoxDecoration(
@@ -1125,39 +1125,6 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
       ),
       child: Row(
         children: [
-          /*
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _isSavingDraft || _isPlacingOrder ? null : _saveDraft,
-              icon: _isSavingDraft
-                  ? const SizedBox(
-                      width: 15,
-                      height: 15,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: _teal600,
-                      ),
-                    )
-                  : const Icon(Icons.save_outlined, size: 17, color: _teal600),
-              label: const Text(
-                'Draft',
-                style: TextStyle(
-                  color: _teal600,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(54),
-                side: const BorderSide(color: _teal500, width: 1.4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-            ),
-          ),
-          */
-          const SizedBox(width: 12),
           Expanded(
             flex: 2,
             child: DecoratedBox(
@@ -1165,20 +1132,11 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                 borderRadius: BorderRadius.circular(16),
                 gradient: LinearGradient(
                   colors: disablePlaceOrder
-                      ? [inkSoft.withOpacity(0.55), inkSoft.withOpacity(0.40)]
-                      : [teal500, teal600],
+                      ? [_inkSoft.withOpacity(0.55), _inkSoft.withOpacity(0.40)]
+                      : [_teal500, _teal600],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                boxShadow: disablePlaceOrder
-                    ? []
-                    : [
-                        BoxShadow(
-                          color: teal500.withOpacity(0.22),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
               ),
               child: FilledButton.icon(
                 onPressed: disablePlaceOrder ? null : _placeOrder,
@@ -1191,21 +1149,15 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
                           color: Colors.white,
                         ),
                       )
-                    : Icon(
+                    : const Icon(
                         Icons.check_circle_outline_rounded,
                         size: 18,
-                        color: disablePlaceOrder
-                            ? Colors.white.withOpacity(0.92)
-                            : Colors.white,
+                        color: Colors.white,
                       ),
                 label: Text(
-                  !meetsMinimumOrderValue && distributorMinimumOrderValue > 0
-                      ? 'Min order value not met'
-                      : 'Place Order',
-                  style: TextStyle(
-                    color: disablePlaceOrder
-                        ? Colors.white.withOpacity(0.92)
-                        : Colors.white,
+                  !_allMeetMOV ? 'MOV not met' : 'Place Orders',
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
                   ),

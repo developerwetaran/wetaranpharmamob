@@ -559,16 +559,7 @@ class _HomePageState extends State<_HomePage> {
       quantity: 1,
     );
 
-    final added = cart.addItem(item);
-
-    if (!added) {
-      _showDistributorSwitchDialog(
-        cart: cart,
-        newDistId: distributorId,
-        newDistName: distributorName,
-      );
-      return;
-    }
+    cart.addItem(item);
 
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -608,89 +599,6 @@ class _HomePageState extends State<_HomePage> {
       distributorId: distributorId,
       distributorName: distributorName,
       cart: cart,
-    );
-  }
-
-  void _showDistributorSwitchDialog({
-    required PharmaCartProvider cart,
-    required String newDistId,
-    required String newDistName,
-  }) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: kAmberBg,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.swap_horiz_rounded,
-                  color: kAmber,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Switch Distributor?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: kInk,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your cart has items from ${cart.lockedDistributorName}. Switching to $newDistName will clear your current cart.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  color: kMuted,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        cart.clear();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kAmber,
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Clear Cart',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -1319,7 +1227,6 @@ class _HomePageState extends State<_HomePage> {
     );
   }
 
-  //  Distributor comparison panel
   Widget _buildComparePanel() {
     final selected = _selectedProduct;
     if (selected == null) return const SizedBox.shrink();
@@ -1420,12 +1327,18 @@ class _HomePageState extends State<_HomePage> {
                 final primaryUnit = displayVariant.primaryUnit;
                 final qtyInCart = cart.qtyForVariant(variantId, primaryUnit);
                 final isInCart = cart.isVariantInCart(variantId, primaryUnit);
-                final isLockedElsewhere =
-                    cart.isNotEmpty &&
-                    cart.lockedDistributorId != null &&
-                    cart.lockedDistributorId != dist.id;
+
                 final isThisDistSelected =
-                    isInCart && cart.lockedDistributorId == dist.id;
+                    cart.isVariantInCart(variantId, primaryUnit) &&
+                    cart.items.any(
+                      (item) =>
+                          item.variantId == variantId &&
+                          item.unit == primaryUnit &&
+                          item.distributorId == dist.id,
+                    );
+
+                final isOtherDistributorSelected =
+                    cart.isNotEmpty && !isThisDistSelected;
 
                 return Container(
                   padding: const EdgeInsets.symmetric(
@@ -1514,36 +1427,7 @@ class _HomePageState extends State<_HomePage> {
                             ),
                           ),
                           const SizedBox(height: 5),
-                          if (isLockedElsewhere)
-                            GestureDetector(
-                              onTap: () => _showDistributorSwitchDialog(
-                                cart: cart,
-                                newDistId: dist.id,
-                                newDistName: dist.companyName,
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 13,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF4E0),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: const Color(0xFFF3D19C),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Switch',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFFB36A00),
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (isThisDistSelected && !hasMultipleVariants)
+                          if (isThisDistSelected)
                             buildQtyStepper(
                               variantId: variantId,
                               unit: primaryUnit,
@@ -1554,35 +1438,34 @@ class _HomePageState extends State<_HomePage> {
                               compact: true,
                             )
                           else
-                            GestureDetector(
-                              onTap: () => _handleProductTap(
+                            ElevatedButton(
+                              onPressed: () => _handleProductTap(
                                 product: product,
                                 distributorId: dist.id,
                                 distributorName: dist.companyName,
                                 cart: cart,
                               ),
-                              child: Container(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isOtherDistributorSelected
+                                    ? const Color(0xFFEF8F21)
+                                    : kTeal,
+                                elevation: 0,
+                                minimumSize: const Size(0, 34),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 13,
-                                  vertical: 6,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: isThisDistSelected
-                                      ? const Color(0xFF2E7D32)
-                                      : kTeal,
+                                shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                child: Text(
-                                  hasMultipleVariants
-                                      ? 'Choose variant'
-                                      : isThisDistSelected
-                                      ? 'Added'
-                                      : 'Add to cart',
-                                  style: const TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
+                              ),
+                              child: Text(
+                                hasMultipleVariants
+                                    ? 'Choose variant'
+                                    : 'Add to cart',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),

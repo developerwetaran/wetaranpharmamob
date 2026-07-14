@@ -215,6 +215,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           builder: (_) => CompleteProfilePage(
             email: widget.email,
             businessName: widget.businessName,
+            //allowBack: false,
           ),
         ),
         (route) => false,

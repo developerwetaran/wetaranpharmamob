@@ -46,12 +46,16 @@ class ProductDistributorOffer {
   });
 }
 
+String? _cartDistributorId(PharmaCartProvider cart) {
+  if (cart.items.isEmpty) return null;
+  return cart.items.first.distributorId;
+}
+
 Future<void> showDistributorComparisonDialog({
   required BuildContext context,
   required String title,
   required List<ProductDistributorOffer> offers,
   required void Function(ProductDistributorOffer offer) onAddOffer,
-  required void Function(ProductDistributorOffer offer) onSwitchDistributor,
 }) {
   return showGeneralDialog(
     context: context,
@@ -64,7 +68,6 @@ Future<void> showDistributorComparisonDialog({
         title: title,
         offers: offers,
         onAddOffer: onAddOffer,
-        onSwitchDistributor: onSwitchDistributor,
       );
     },
     transitionBuilder: (_, anim, __, child) {
@@ -86,13 +89,11 @@ class _DistributorComparisonDialog extends StatelessWidget {
   final String title;
   final List<ProductDistributorOffer> offers;
   final void Function(ProductDistributorOffer offer) onAddOffer;
-  final void Function(ProductDistributorOffer offer) onSwitchDistributor;
 
   const _DistributorComparisonDialog({
     required this.title,
     required this.offers,
     required this.onAddOffer,
-    required this.onSwitchDistributor,
   });
 
   @override
@@ -228,7 +229,6 @@ class _DistributorComparisonDialog extends StatelessWidget {
                                   isCheapest: i == 0,
                                   cart: cart,
                                   onAddOffer: onAddOffer,
-                                  onSwitchDistributor: onSwitchDistributor,
                                 );
                               },
                             ),
@@ -249,14 +249,12 @@ class _DistributorOfferTile extends StatelessWidget {
   final bool isCheapest;
   final PharmaCartProvider cart;
   final void Function(ProductDistributorOffer offer) onAddOffer;
-  final void Function(ProductDistributorOffer offer) onSwitchDistributor;
 
   const _DistributorOfferTile({
     required this.offer,
     required this.isCheapest,
     required this.cart,
     required this.onAddOffer,
-    required this.onSwitchDistributor,
   });
 
   @override
@@ -266,25 +264,12 @@ class _DistributorOfferTile extends StatelessWidget {
       offer.variant.id,
       offer.variant.primaryUnit,
     );
-    final lockedElsewhere =
-        cart.isNotEmpty &&
-        cart.lockedDistributorId != null &&
-        cart.lockedDistributorId != offer.distributorId;
-    final selectedHere =
-        cart.lockedDistributorId == offer.distributorId && inCart;
+    final activeDistributorId = _cartDistributorId(cart);
+    final selectedHere = activeDistributorId == offer.distributorId && inCart;
     final outOfStock = offer.stock <= 0;
 
-    final tileBg = selectedHere
-        ? const Color(0xFFF0FFF8)
-        : lockedElsewhere
-        ? const Color(0xFFFFFBF5)
-        : Colors.white;
-
-    final tileBorder = selectedHere
-        ? const Color(0xFFBBF7D0)
-        : lockedElsewhere
-        ? const Color(0xFFF3D19C)
-        : _border;
+    final tileBg = selectedHere ? const Color(0xFFF0FFF8) : Colors.white;
+    final tileBorder = selectedHere ? const Color(0xFFBBF7D0) : _border;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -400,62 +385,30 @@ class _DistributorOfferTile extends StatelessWidget {
               color: _muted,
             ),
           ),
-          if (lockedElsewhere) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: _amberSoft,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFF3D19C)),
-              ),
-              child: Text(
-                'Cart is locked to ${cart.lockedDistributorName ?? 'another distributor'}. Switch to order from ${offer.distributorName}.',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF9A5A00),
-                  fontWeight: FontWeight.w700,
-                  height: 1.35,
-                ),
-              ),
-            ),
-          ],
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: selectedHere
                 ? _LiveQtyState(qty: qty, unit: offer.variant.primaryUnit)
                 : OutlinedButton.icon(
-                    onPressed: lockedElsewhere
-                        ? () => onSwitchDistributor(offer)
-                        : (outOfStock && !offer.allowBeyond)
+                    onPressed: (outOfStock && !offer.allowBeyond)
                         ? null
                         : () => onAddOffer(offer),
-                    icon: Icon(
-                      lockedElsewhere
-                          ? Icons.swap_horiz_rounded
-                          : Icons.add_shopping_cart_rounded,
+                    icon: const Icon(
+                      Icons.add_shopping_cart_rounded,
                       size: 16,
-                      color: lockedElsewhere ? _amber : _blue,
+                      color: _blue,
                     ),
-                    label: Text(
-                      lockedElsewhere ? 'Switch Distributor' : 'Add to Cart',
+                    label: const Text(
+                      'Add to Cart',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: lockedElsewhere ? _amber : _blue,
+                        color: _blue,
                       ),
                     ),
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: lockedElsewhere
-                            ? const Color(0xFFF3D19C)
-                            : _blue,
-                        width: 1.4,
-                      ),
-                      backgroundColor: lockedElsewhere
-                          ? _amberSoft
-                          : Colors.white,
+                      side: const BorderSide(color: _blue, width: 1.4),
+                      backgroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),

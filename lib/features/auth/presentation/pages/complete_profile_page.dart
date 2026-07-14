@@ -1,23 +1,30 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:wetaran_pharma/core/config/app_constants.dart';
 import 'package:wetaran_pharma/core/widgets/pharma_auth_shell.dart';
+import 'package:wetaran_pharma/features/auth/presentation/pages/login_page.dart';
 import 'package:wetaran_pharma/features/home/presentation/pages/main_shell.dart';
 
 class CompleteProfilePage extends StatefulWidget {
   final String email;
   final String businessName;
+  final bool allowBack;
 
   const CompleteProfilePage({
     super.key,
     required this.email,
     required this.businessName,
+    this.allowBack = true,
   });
 
   @override
@@ -46,6 +53,14 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   String? _existingLicenseUrl;
 
   File? _licenseFile;
+
+  File? _gstFile;
+  String? _existingGstUrl;
+  bool _clientAgreementAccepted = false;
+  String? _clientAgreementUrl;
+  DateTime? _clientAgreementAcceptedAt;
+  String _clientAgreementVersion = '1.0';
+  bool _isAgreementLoading = false;
 
   final List<_BusinessTypeOption> _businessTypes = const [
     _BusinessTypeOption(value: 'chemist_store', label: 'Chemist Store'),
@@ -97,6 +112,40 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     _businessStateController.dispose();
     _businessPincodeController.dispose();
     super.dispose();
+  }
+
+  Future<String?> _uploadDrugLicenseIfNeeded() async {
+    if (_licenseFile == null) {
+      return _existingLicenseUrl;
+    }
+
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('User session not found');
+
+    final fileName =
+        'drug_license_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final storagePath = 'pharma-documents/$userId/$fileName';
+
+    await _supabase.storage.from('products').upload(storagePath, _licenseFile!);
+
+    return _supabase.storage.from('products').getPublicUrl(storagePath);
+  }
+
+  Future<String?> _uploadGstIfNeeded() async {
+    if (_gstFile == null) {
+      return _existingGstUrl;
+    }
+
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('User session not found');
+
+    final fileName =
+        'gst_certificate_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final storagePath = 'pharma-documents/$userId/$fileName';
+
+    await _supabase.storage.from('products').upload(storagePath, _gstFile!);
+
+    return _supabase.storage.from('products').getPublicUrl(storagePath);
   }
 
   Future<void> _fetchAndFillAddress() async {
@@ -221,7 +270,23 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
         _businessPincodeController.text = (row['business_pincode'] ?? '')
             .toString();
         _selectedBusinessType = row['business_type']?.toString();
+
         _existingLicenseUrl = row['drug_license_copy_url']?.toString();
+        _existingGstUrl = row['gst_certificate_url']?.toString();
+
+        _clientAgreementUrl = row['client_service_agreement_url']?.toString();
+        _clientAgreementVersion =
+            (row['client_service_agreement_version'] ?? '1.0').toString();
+
+        final acceptedAtText = row['client_service_agreement_accepted_at']
+            ?.toString();
+        if (acceptedAtText != null && acceptedAtText.isNotEmpty) {
+          _clientAgreementAcceptedAt = DateTime.tryParse(acceptedAtText);
+        }
+
+        _clientAgreementAccepted =
+            (_clientAgreementUrl ?? '').isNotEmpty ||
+            _clientAgreementAcceptedAt != null;
 
         final geoLocationText = row['geo_location']?.toString();
         if (geoLocationText != null && geoLocationText.trim().isNotEmpty) {
@@ -246,6 +311,18 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _openPdfUrl(String? url) async {
+    if (url == null || url.isEmpty) {
+      _showError('PDF not available');
+      return;
+    }
+
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _showError('Could not open PDF');
     }
   }
 
@@ -298,6 +375,350 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     return storagePath;
   }
 
+  Future<void> _showClientServiceAgreementDialog() async {
+    final agreementText = _buildClientServiceAgreementText(
+      businessName: _businessNameController.text.trim(),
+      entityType: _selectedBusinessType ?? '',
+      contactPerson: _contactPersonNameController.text.trim(),
+      gstNumber: _gstNumberController.text.trim(),
+      drugLicense: _drugLicenseNumberController.text.trim(),
+      address: _businessAddressController.text.trim(),
+      acceptedAtText: _formatAgreementTimestamp(DateTime.now()),
+    );
+
+    bool accepted = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.88,
+                  maxWidth: 900,
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Client Service Agreement',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Version 1.0 · Retailer Service Agreement',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: Color(0xFF5B6B85),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(18),
+                        child: Text(
+                          agreementText,
+                          style: const TextStyle(fontSize: 13.2, height: 1.55),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: accepted,
+                            onChanged: (v) =>
+                                setState(() => accepted = v ?? false),
+                          ),
+                          const Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(top: 10),
+                              child: Text(
+                                'I have reviewed and accept the terms of the Client Service Agreement.',
+                                style: TextStyle(fontSize: 12.8, height: 1.35),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: accepted
+                                  ? () async {
+                                      Navigator.of(dialogContext).pop();
+                                      await _acceptClientServiceAgreement();
+                                    }
+                                  : null,
+                              child: const Text('Accept'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _formatAgreementTimestamp(DateTime dt) {
+    final local = dt.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final ampm = local.hour >= 12 ? 'pm' : 'am';
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final year = local.year.toString();
+    final minute = local.minute.toString().padLeft(2, '0');
+    final second = local.second.toString().padLeft(2, '0');
+    return '$day $month $year ${hour.toString().padLeft(2, '0')}:$minute:$second $ampm';
+  }
+
+  Future<Uint8List> _generateAgreementPdf(
+    String agreementText, {
+    required String title,
+  }) async {
+    final pdf = pw.Document();
+    final sections = agreementText
+        .split('\n\n')
+        .where((e) => e.trim().isNotEmpty)
+        .toList();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (context) {
+          return [
+            pw.Text(
+              title,
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 12),
+            ...sections.map(
+              (s) => pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 8),
+                child: pw.Text(
+                  s,
+                  style: const pw.TextStyle(fontSize: 9.8, height: 1.4),
+                ),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  String _buildClientServiceAgreementText({
+    required String businessName,
+    required String entityType,
+    required String contactPerson,
+    required String gstNumber,
+    required String drugLicense,
+    required String address,
+    required String acceptedAtText,
+  }) {
+    return '''
+RETAILER SERVICE AGREEMENT - Wetaran Tech Private Limited
+Version 1.0
+This Service Agreement ("Agreement") is entered into between:
+Wetaran Tech Private Limited, a company incorporated under the Companies Act, 2013, having its registered office at Dynasty Business Park Level 4, A-Wing, Andheri Kurla Road, Andheri East 400059, Mumbai, Maharashtra ("Wetaran", the "Service Provider"), operator of the Wetaran Pharma platform (web and mobile applications) ("Platform"); and
+$businessName, being a $entityType, having its principal place of business at $address, holding GSTIN $gstNumber and Drug Licence No(s). $drugLicense (the "Client").
+Effective Date: $acceptedAtText
+
+1. Scope of Services
+1.1 Wetaran shall provide the Client the following technology services through the Platform ("Services"):
+(a) Marketplace access - access to a central medicine repository through which the Client can browse products and compare verified pharmaceutical distributors ("Distributors") on price, stock availability, and delivery time;
+(b) Ordering services - placement of purchase orders with one or more Distributors; each order placed with a Distributor generates its own unique order number and is fulfilled and invoiced by that Distributor separately;
+(c) Order tracking - status updates from order placement to delivery;
+(d) Scheme benefits - where a manufacturer or brand routes trade scheme benefits through the Platform, such benefits are passed through to the Client as trade benefits (trade discount, bonus units, or credit note) on qualifying orders;
+(e) Rewards - cashback or reward programs on qualifying orders, as per Clause 6;
+(f) Verified counterparties - Distributors on the Platform are onboarded subject to dual verification of GST and drug licence;
+(g) Support - account and technical support during business hours.
+1.2 Wetaran provides technology services only. Wetaran is an intermediary under the Information Technology Act, 2000 and is not the seller, stockist, or agent of any Distributor. Every purchase concluded through the Platform is a direct contract between the Client and the relevant Distributor; title, risk, invoicing, and payment for goods flow directly between them.
+
+2. Service Availability
+2.1 Wetaran shall use commercially reasonable efforts to keep the Platform available 24x7, excluding scheduled maintenance (notified in advance where practicable) and events beyond Wetaran's reasonable control.
+2.2 The Services are provided on an "as is" basis during the current beta phase; features may be added, modified, or withdrawn with notice.
+
+3. Fees
+3.1 The Services are currently provided free of charge to the Client. No subscription, ordering, or transaction fees are presently payable.
+3.2 Wetaran may introduce fees for specific Services with at least 30 days' prior written notice. Continued use after the effective date of a fee schedule constitutes acceptance; the Client may terminate under Clause 10 if it does not accept.
+3.3 The price payable for goods is the Distributor's price displayed at the time of order, payable by the Client directly to the Distributor on the payment terms displayed.
+
+4. Client Eligibility & Verification
+4.1 The Client must at all times hold and maintain:
+(a) a valid Drug Licence appropriate to its establishment (retail sale licence in Forms 20/21 or equivalent, or the licence/registration applicable to a hospital or clinic dispensing establishment) under the Drugs and Cosmetics Act, 1940 and Rules, 1945; and
+(b) a valid GST registration.
+4.2 Access to Services is subject to Wetaran's dual verification of GST and drug licence at sign-up. The Client shall promptly notify Wetaran of any suspension, cancellation, expiry, or modification of any licence; Wetaran may suspend Services immediately upon any lapse.
+4.3 The account is for the Client entity's business use only. The Client is responsible for the confidentiality of its credentials and for all activity under its account.
+
+5. Client Obligations
+5.1 Licensed purchasing only. The Client shall purchase products solely for dispensing, sale, or use as permitted by its licence(s), and shall not purchase products it is not licensed to stock, dispense, or sell (including scheduled drugs outside the scope of its licence).
+5.2 No unauthorised resale. Products purchased through the Platform shall not be diverted, re-exported, or resold in violation of applicable law.
+5.3 Payment. The Client shall pay each Distributor in full as per the payment terms accepted at the time of order. Wetaran is not a party to, does not collect (unless expressly stated on the Platform), and does not guarantee any payment.
+5.4 Receipt of goods. The Client shall inspect goods on delivery and raise any short-supply, damage, or discrepancy claim through the Platform within 48 hours of delivery.
+5.5 Accurate information. All information and documents provided to Wetaran, including licence and GST details and structured address information, shall be true, complete, and kept current.
+5.6 Compliance. The Client shall comply with all applicable laws, including the Drugs and Cosmetics Act, 1940 and Rules, 1945, and GST laws, in its purchase, storage, and dispensing of products.
+
+6. Rewards & Scheme Benefits
+6.1 Cashback and reward programs are promotional, funded and administered by Wetaran and/or participating brands, and may be modified, suspended, or withdrawn prospectively at any time with notice. Accrued benefits will be honoured.
+6.2 All scheme benefits, cashback, and rewards are extended to the Client entity as trade benefits and shall be applied to the entity's account. No benefit under this Agreement constitutes, and none shall be claimed or used as, a personal payment, gift, or inducement to any individual medical practitioner, in line with the Uniform Code of Pharmaceutical Marketing Practices (UCPMP) and applicable law.
+6.3 Rewards misuse, including fake orders, self-dealing, split orders to game thresholds, or misrepresentation entitles Wetaran to reverse benefits and suspend or terminate the account.
+
+7. Data & Privacy
+7.1 The Client grants Wetaran a non-exclusive, royalty-free licence to use transactional data generated on the Platform (orders, products, quantities, fulfilment) to provide the Services, administer schemes and rewards, and produce aggregated and anonymised analytics and market intelligence.
+7.2 Each party shall comply with the Digital Personal Data Protection Act, 2023. Wetaran processes personal data of the Client's authorised users per its Privacy Policy. Analytics describe medication demand patterns at an aggregated level; the Platform does not collect or process patient-level data.
+
+8. Returns, Disputes & Wetaran's Role
+8.1 Returns of damaged, short-supplied, wrongly supplied, or recalled products are governed by the relevant Distributor's returns obligations and stated policy; the Client shall raise returns through the Platform within the applicable window.
+8.2 Disputes regarding goods, quality, invoicing, or delivery are between the Client and the Distributor. Wetaran will facilitate resolution through the Platform's process but is not liable for the goods, their quality, or the Distributor's performance.
+8.3 Product information in the central medicine repository is compiled from manufacturer and public sources for identification and ordering convenience; it is not medical advice, and the Client remains responsible for its own professional dispensing decisions.
+
+9. Warranties, Indemnity & Limitation of Liability
+9.1 The Client represents and warrants that it has authority to enter this Agreement, that all licences and documents furnished are valid, true, and complete, and that its use of the Services will comply with applicable law.
+9.2 The Client shall indemnify and hold harmless Wetaran, its directors, and employees from any claim, penalty, loss, or expense (including legal costs) arising from:
+(a) breach of this Agreement or applicable law;
+(b) invalidity or misuse of any licence;
+(c) misuse of rewards or the account; or
+(d) the Client's dispensing, storage, or onward sale of products.
+9.3 Wetaran does not warrant uninterrupted or error-free operation, the availability of any product or Distributor, or any price level. Wetaran shall not be liable for indirect, incidental, or consequential losses, loss of profit, or loss of business. Wetaran's aggregate liability under this Agreement shall not exceed INR 25,000 or the fees paid by the Client to Wetaran in the preceding 12 months, whichever is higher.
+
+10. Term, Suspension & Termination
+10.1 This Agreement is effective from the Effective Date and continues until terminated.
+10.2 Either party may terminate for convenience with 30 days' written notice. Orders placed before termination remain binding between the Client and the relevant Distributor.
+10.3 Wetaran may suspend or terminate the Services immediately upon:
+(a) lapse or cancellation of any Client licence;
+(b) purchase attempts outside licence scope;
+(c) rewards misuse or fraud;
+(d) repeated payment defaults reported by Distributors; or
+(e) breach not cured within 15 days of notice.
+10.4 On termination, access ceases and unaccrued promotional benefits lapse; Clauses 7, 9, 11, and 12 survive.
+
+11. Confidentiality & Intellectual Property
+11.1 Each party shall keep confidential the other's non-public business information and use it only for purposes of this Agreement.
+11.2 The Platform, its software, medicine repository, trademarks, and all Wetaran branding remain Wetaran's exclusive property. The Client receives only a limited, non-transferable right to use the Platform during the term.
+
+12. Governing Law & Dispute Resolution
+12.1 This Agreement is governed by the laws of India.
+12.2 Disputes between Wetaran and the Client shall first be attempted to be resolved amicably within 30 days, failing which they shall be referred to arbitration by a sole arbitrator under the Arbitration and Conciliation Act, 1996. Seat and venue: Mumbai. Language: English. Subject to arbitration, courts at Mumbai shall have exclusive jurisdiction.
+
+13. General
+13.1 Notices shall be in writing to the addresses/emails stated above.
+13.2 Force majeure: neither party is liable for delay caused by events beyond reasonable control.
+13.3 Assignment: the Client may not assign this Agreement without Wetaran's written consent.
+13.4 Relationship: the parties are independent contractors; nothing creates an agency, partnership, or employment relationship.
+13.5 Amendments: Wetaran may update Platform policies with notice; material amendments to this Agreement require 30 days' notice.
+13.6 Entire agreement: this Agreement, together with the Platform Terms of Use and Privacy Policy, constitutes the entire agreement and supersedes prior discussions.
+
+ACCEPTANCE
+I have reviewed and accept the terms of the Client Service Agreement.
+Client / Retailer Legal Name: $businessName
+Entity Type: $entityType
+Authorised Contact Person: $contactPerson
+GSTIN: $gstNumber
+Drug Licence No(s).: $drugLicense
+Principal Place of Business: $address
+Client acceptance timestamp (IST): $acceptedAtText
+''';
+  }
+
+  Future<void> _acceptClientServiceAgreement() async {
+    if (_isAgreementLoading) return;
+
+    setState(() => _isAgreementLoading = true);
+
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('User session not found');
+
+      final row = await _supabase
+          .from('pharma_users')
+          .select(
+            'client_service_agreement_url, client_service_agreement_accepted_at, client_service_agreement_version',
+          )
+          .eq('auth_user_id', userId)
+          .maybeSingle();
+
+      if (row != null) {
+        final existingUrl = (row['client_service_agreement_url'] ?? '')
+            .toString();
+        if (existingUrl.isNotEmpty) {
+          _clientAgreementUrl = existingUrl;
+          _clientAgreementAccepted = true;
+          _clientAgreementAcceptedAt = DateTime.tryParse(
+            (row['client_service_agreement_accepted_at'] ?? '').toString(),
+          );
+          _clientAgreementVersion =
+              (row['client_service_agreement_version'] ?? '1.0').toString();
+
+          if (mounted) setState(() {});
+          return;
+        }
+      }
+
+      _clientAgreementAccepted = true;
+      _clientAgreementAcceptedAt = DateTime.now().toUtc();
+
+      if (mounted) setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      _showError('Failed to accept agreement: $error');
+    } finally {
+      if (!mounted) return;
+      setState(() => _isAgreementLoading = false);
+    }
+  }
+
   Future<void> _saveProfile() async {
     if (_isSaving) return;
 
@@ -306,6 +727,11 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
 
     if (_selectedBusinessType == null) {
       _showError('Please select a business type');
+      return;
+    }
+
+    if (!_clientAgreementAccepted) {
+      _showError('Please review and accept the Client Service Agreement');
       return;
     }
 
@@ -321,7 +747,8 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
         throw Exception('User session not found');
       }
 
-      final licensePath = await _uploadLicenseIfNeeded();
+      final drugLicenseUrl = await _uploadDrugLicenseIfNeeded();
+      final gstUrl = await _uploadGstIfNeeded();
 
       final businessName = _businessNameController.text.trim();
       final phoneNumber = _phoneNumberController.text.trim();
@@ -343,12 +770,51 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
           phoneNumber.isNotEmpty &&
           businessAddress.isNotEmpty &&
           drugLicenseNumber.isNotEmpty &&
-          (licensePath?.trim().isNotEmpty ?? false) &&
+          (drugLicenseUrl?.trim().isNotEmpty ?? false) &&
           gstNumber.isNotEmpty &&
           contactPersonName.isNotEmpty &&
           businessCity.isNotEmpty &&
           businessState.isNotEmpty &&
           businessPincode.isNotEmpty;
+
+      String? agreementUrl = _clientAgreementUrl;
+      if (agreementUrl == null || agreementUrl.isEmpty) {
+        final acceptedAt = _clientAgreementAcceptedAt ?? DateTime.now().toUtc();
+        final acceptedAtText = _formatAgreementTimestamp(acceptedAt);
+
+        final agreementText = _buildClientServiceAgreementText(
+          businessName: businessName,
+          entityType: _selectedBusinessType ?? '',
+          contactPerson: contactPersonName,
+          gstNumber: gstNumber,
+          drugLicense: drugLicenseNumber,
+          address: businessAddress,
+          acceptedAtText: acceptedAtText,
+        );
+
+        final pdfBytes = await _generateAgreementPdf(
+          agreementText,
+          title: 'client-service-agreement-v1.0',
+        );
+
+        final fileName =
+            'client-service-agreement-v1.0-${DateTime.now().millisecondsSinceEpoch}.pdf';
+        final storagePath = 'pharma-documents/$userId/$fileName';
+
+        await _supabase.storage
+            .from('products')
+            .uploadBinary(
+              storagePath,
+              pdfBytes,
+              fileOptions: const FileOptions(contentType: 'application/pdf'),
+            );
+
+        agreementUrl = _supabase.storage
+            .from('products')
+            .getPublicUrl(storagePath);
+        _clientAgreementUrl = agreementUrl;
+        _clientAgreementAcceptedAt ??= acceptedAt;
+      }
 
       await _supabase
           .from('pharma_users')
@@ -358,7 +824,6 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
             'phone_number': phoneNumber,
             'business_address': businessAddress,
             'drug_license_number': drugLicenseNumber,
-            'drug_license_copy_url': licensePath,
             'gst_number': gstNumber,
             'contact_person_name': contactPersonName,
             'business_city': businessCity,
@@ -367,6 +832,13 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
             'business_pincode': businessPincode,
             'profile_status': isProfileComplete ? 'complete' : 'incomplete',
             'can_place_medicine_orders': isProfileComplete,
+            'drug_license_copy_url': drugLicenseUrl,
+            'gst_certificate_url': gstUrl,
+            'client_service_agreement_url': agreementUrl,
+            'client_service_agreement_accepted_at':
+                _clientAgreementAcceptedAt?.toIso8601String() ??
+                DateTime.now().toIso8601String(),
+            'client_service_agreement_version': _clientAgreementVersion,
             'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('auth_user_id', userId);
@@ -388,6 +860,21 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     }
   }
 
+  String _formatAcceptedOnLine(DateTime? dt, String version) {
+    if (dt == null) return 'Accepted · v$version';
+
+    final local = dt.toLocal();
+    final day = local.day;
+    final month = local.month;
+    final year = local.year;
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final second = local.second.toString().padLeft(2, '0');
+    final ampm = local.hour >= 12 ? 'pm' : 'am';
+
+    return 'Accepted on $day/$month/$year, $hour:$minute:$second $ampm · v$version';
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -405,20 +892,75 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     return 'Select business type';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: bg,
-        body: Center(
-          child: CircularProgressIndicator(strokeWidth: 2.5, color: teal500),
+  void _handleBlockedBack() {
+    Future<void> _confirmExitDialog() async {
+      final shouldExit = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Complete your profile'),
+          content: const Text(
+            'Please finish your business details to continue. Do you want to sign out instead?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Stay'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Sign out'),
+            ),
+          ],
         ),
       );
+
+      if (shouldExit == true) {
+        await _supabase.auth.signOut();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+          (route) => false,
+        );
+      }
     }
 
-    return Scaffold(
-      backgroundColor: bg,
-      body: PharmaAuthShell(
+    _confirmExitDialog();
+  }
+
+  Future<void> _pickGstFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final pickedFile = result.files.first;
+
+      if (pickedFile.path == null || pickedFile.path!.isEmpty) {
+        _showError('Unable to read selected PDF file');
+        return;
+      }
+
+      setState(() {
+        _gstFile = File(pickedFile.path!);
+      });
+    } catch (error) {
+      _showError('Failed to pick GST PDF: $error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: widget.allowBack,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBlockedBack();
+      },
+      child: PharmaAuthShell(
         compactHero: true,
         child: Form(
           key: _formKey,
@@ -426,8 +968,12 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _SignupBackButton(
-                onTap: _isSaving ? null : () => Navigator.of(context).pop(),
-                label: 'Back',
+                onTap: _isSaving
+                    ? null
+                    : (widget.allowBack
+                          ? () => Navigator.of(context).pop()
+                          : _handleBlockedBack),
+                label: widget.allowBack ? 'Back' : 'Sign out',
               ),
               const SizedBox(height: 8),
               const _SignupProgress(step: 3),
@@ -784,10 +1330,164 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                 file: _licenseFile,
                 existingLicenseUrl: _existingLicenseUrl,
                 onTap: _pickLicenseFile,
+                onView: (_licenseFile != null && _licenseFile!.path.isNotEmpty)
+                    ? () => _openPdfUrl(_licenseFile!.path)
+                    : (_existingLicenseUrl == null
+                          ? null
+                          : () => _openPdfUrl(_existingLicenseUrl)),
               ),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 24),
-
+              const _FieldLabel('GST CERTIFICATE', requiredField: true),
+              const SizedBox(height: 8),
+              _GstUploadCard(
+                file: _gstFile,
+                existingGstUrl: _existingGstUrl,
+                onTap: _pickGstFile,
+                onView: (_gstFile != null && _gstFile!.path.isNotEmpty)
+                    ? () => _openPdfUrl(_gstFile!.path)
+                    : (_existingGstUrl == null
+                          ? null
+                          : () => _openPdfUrl(_existingGstUrl)),
+              ),
+              const SizedBox(height: 15),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE3E9F3)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0A0A2451),
+                      blurRadius: 18,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF2F7FF),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.description_outlined,
+                            color: Color(0xFF1D4ED8),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Client Service Agreement',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF10233F),
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Review and accept the Wetaran Retailer Service Agreement to continue using medicine orders.',
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12.3,
+                                  height: 1.35,
+                                  color: Color(0xFF5B6B85),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _isAgreementLoading
+                                ? null
+                                : _showClientServiceAgreementDialog,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(42),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _clientAgreementAccepted
+                                  ? 'Accepted'
+                                  : 'Review & accept',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_clientAgreementAccepted &&
+                            _clientAgreementUrl != null) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _openPdfUrl(_clientAgreementUrl),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(42),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.download_rounded,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'Download PDF',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _clientAgreementAccepted
+                          ? _formatAcceptedOnLine(
+                              _clientAgreementAcceptedAt,
+                              _clientAgreementVersion,
+                            )
+                          : 'Not accepted yet — required to enable medicine orders',
+                      style: TextStyle(
+                        fontSize: 12.4,
+                        fontWeight: FontWeight.w700,
+                        color: _clientAgreementAccepted
+                            ? const Color(0xFF15803D)
+                            : const Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               Container(
                 height: 56,
                 decoration: BoxDecoration(
@@ -1010,11 +1710,14 @@ class _LicenseUploadCard extends StatelessWidget {
   final File? file;
   final String? existingLicenseUrl;
   final VoidCallback onTap;
+  final VoidCallback? onView;
 
   const _LicenseUploadCard({
+    super.key,
     required this.file,
     required this.existingLicenseUrl,
     required this.onTap,
+    this.onView,
   });
 
   @override
@@ -1040,62 +1743,85 @@ class _LicenseUploadCard extends StatelessWidget {
             width: 1.5,
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                hasFile || hasExisting
-                    ? Icons.check_circle_outline_rounded
-                    : Icons.upload_file_outlined,
-                color: hasFile || hasExisting
-                    ? _CompleteProfilePageState.green600
-                    : const Color(0xFF1D4ED8),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    hasFile
-                        ? file!.path.split('/').last
-                        : hasExisting
-                        ? 'Drug license already uploaded'
-                        : 'Tap to upload Drug License PDF',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _CompleteProfilePageState.ink,
-                    ),
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    hasFile
-                        ? 'Selected, tap to change'
-                        : hasExisting
-                        ? 'Tap to replace uploaded PDF'
-                        : 'PDF only',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: hasFile || hasExisting
-                          ? FontWeight.w600
-                          : FontWeight.w500,
-                      color: hasFile || hasExisting
-                          ? _CompleteProfilePageState.teal600
-                          : _CompleteProfilePageState.inkFaint,
-                    ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    hasFile || hasExisting
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.upload_file_outlined,
+                    color: hasFile || hasExisting
+                        ? _CompleteProfilePageState.green600
+                        : const Color(0xFF1D4ED8),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasFile
+                            ? file!.path.split('/').last
+                            : hasExisting
+                            ? 'Drug license already uploaded'
+                            : 'Tap to upload Drug License PDF',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _CompleteProfilePageState.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        hasFile
+                            ? 'Selected, tap to change'
+                            : hasExisting
+                            ? 'Click to replace with a new PDF'
+                            : 'PDF only',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: hasFile || hasExisting
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: hasFile || hasExisting
+                              ? _CompleteProfilePageState.teal600
+                              : _CompleteProfilePageState.inkFaint,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (hasExisting || hasFile) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: onTap,
+                    icon: const Icon(Icons.upload_outlined, size: 18),
+                    label: const Text('Replace PDF'),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: onView,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('View PDF'),
                   ),
                 ],
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -1534,3 +2260,125 @@ const List<String> _indianStatesAndUts = [
   'Lakshadweep',
   'Puducherry',
 ];
+
+class _GstUploadCard extends StatelessWidget {
+  final File? file;
+  final String? existingGstUrl;
+  final VoidCallback onTap;
+  final VoidCallback? onView;
+
+  const _GstUploadCard({
+    super.key,
+    required this.file,
+    required this.existingGstUrl,
+    required this.onTap,
+    this.onView,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFile = file != null;
+    final hasExisting = existingGstUrl != null && existingGstUrl!.isNotEmpty;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: hasFile || hasExisting
+              ? _CompleteProfilePageState.teal50
+              : _CompleteProfilePageState.uploadBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: hasFile || hasExisting
+                ? _CompleteProfilePageState.teal500
+                : const Color(0xFFC3D0E4),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    hasFile || hasExisting
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.upload_file_outlined,
+                    color: hasFile || hasExisting
+                        ? _CompleteProfilePageState.green600
+                        : const Color(0xFF1D4ED8),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasFile
+                            ? file!.path.split('/').last
+                            : hasExisting
+                            ? 'GST certificate already uploaded'
+                            : 'Tap to upload GST certificate PDF',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _CompleteProfilePageState.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        hasFile
+                            ? 'Selected, tap to change'
+                            : hasExisting
+                            ? 'Click to replace with a new PDF'
+                            : 'PDF only',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: hasFile || hasExisting
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: hasFile || hasExisting
+                              ? _CompleteProfilePageState.teal600
+                              : _CompleteProfilePageState.inkFaint,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (hasExisting || hasFile) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: onTap,
+                    icon: const Icon(Icons.upload_outlined, size: 18),
+                    label: const Text('Replace PDF'),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: onView,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('View PDF'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

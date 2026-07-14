@@ -65,10 +65,8 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _signIn() async {
     if (_isLoading) return;
-
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
-
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
 
@@ -78,35 +76,50 @@ class _LoginPageState extends State<LoginPage> {
         password: _passwordController.text.trim(),
       );
 
-      debugPrint('LOGIN SUCCESS');
-      debugPrint('auth user id: ${result.user?.id}');
-      debugPrint('auth email: ${result.user?.email}');
-      debugPrint('session exists: ${result.session != null}');
+      if (!mounted) return;
 
       final authUserId = result.user?.id;
-      if (authUserId != null) {
-        try {
-          final profile = await _supabase
-              .from('pharma_users')
-              .select()
-              .eq('auth_user_id', authUserId)
-              .maybeSingle();
-          debugPrint('pharma_users profile: $profile');
-        } catch (e, st) {
-          debugPrint('pharma_users fetch failed after login: $e');
-          debugPrintStack(stackTrace: st);
-        }
+      if (authUserId == null) {
+        _showSnack('Login failed. Please try again.');
+        return;
       }
 
+      final profile = await _supabase
+          .from('pharma_users')
+          .select()
+          .eq('auth_user_id', authUserId)
+          .maybeSingle();
+
       if (!mounted) return;
-    } on AuthException catch (error, st) {
-      debugPrint('LOGIN AuthException: ${error.message}');
-      debugPrintStack(stackTrace: st);
+
+      if (profile == null) {
+        await _supabase.auth.signOut();
+        if (!mounted) return;
+        _showSnack('No pharmacy profile found for this account.');
+        return;
+      }
+
+      final profileStatus = profile['profile_status'] as String?;
+
+      if (profileStatus == 'blocked') {
+        await _supabase.auth.signOut();
+        if (!mounted) return;
+        _showSnack('Your account has been blocked. Please contact support.');
+        return;
+      }
+
+      if (profileStatus == 'rejected') {
+        await _supabase.auth.signOut();
+        if (!mounted) return;
+        _showSnack('Your account was rejected. Please contact support.');
+        return;
+      }
+
+      // profile_status
+    } on AuthException catch (error) {
       if (!mounted) return;
       _showSnack(error.message);
-    } catch (e, st) {
-      debugPrint('LOGIN unknown error: $e');
-      debugPrintStack(stackTrace: st);
+    } catch (e) {
       if (!mounted) return;
       _showSnack('Something went wrong. Please try again.');
     } finally {

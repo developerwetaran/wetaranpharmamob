@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wetaran_pharma/core/widgets/pharma_auth_shell.dart';
+import 'package:wetaran_pharma/features/auth/presentation/pages/complete_profile_page.dart';
 import 'package:wetaran_pharma/features/auth/presentation/pages/otp_verification_page.dart';
 
 class SignupPage extends StatefulWidget {
@@ -86,20 +87,14 @@ class _SignupPageState extends State<SignupPage> {
 
   Future<void> _continueSignup() async {
     if (_isLoading) return;
-
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
-
     if (_selectedBusinessType == null) {
       _showError('Please select a business type');
       return;
     }
-
     FocusScope.of(context).unfocus();
-
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final response = await _supabase.functions.invoke(
@@ -114,19 +109,53 @@ class _SignupPageState extends State<SignupPage> {
       );
 
       final data = response.data;
-
       if (!mounted) return;
-
       if (data == null || data is! Map) {
         _showError('Unexpected server response');
         return;
       }
 
       final success = data['success'];
+      final errorCode = data['error_code']?.toString();
+
       if (success != true) {
-        _showError(
-          (data['error'] ?? data['message'] ?? 'Unable to continue signup')
-              .toString(),
+        switch (errorCode) {
+          case 'email_and_phone_exists':
+            _showError(
+              'This email and phone number are both already registered. Try signing in instead.',
+            );
+            break;
+          case 'email_exists':
+            _showError(
+              'This email is already registered. Try signing in or use a different email.',
+            );
+            break;
+          case 'phone_exists':
+            _showError(
+              'This phone number is already registered. Try signing in or use a different number.',
+            );
+            break;
+          case 'account_exists':
+            _showError('Account already exists. Please sign in instead.');
+            break;
+          default:
+            _showError(
+              (data['error'] ?? data['message'] ?? 'Unable to continue signup')
+                  .toString(),
+            );
+        }
+        return;
+      }
+
+      if (errorCode == 'profile_incomplete') {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => CompleteProfilePage(
+              email: _emailController.text.trim().toLowerCase(),
+              businessName: _businessNameController.text.trim(),
+            ),
+          ),
+          (route) => false,
         );
         return;
       }
@@ -157,9 +186,7 @@ class _SignupPageState extends State<SignupPage> {
       _showError('Something went wrong. Please try again.');
     } finally {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 

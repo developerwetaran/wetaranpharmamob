@@ -165,6 +165,42 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
     });
   }
 
+  List<Map<String, dynamic>> _readProducts(Map<String, dynamic> order) {
+    final raw = order['products'] as List? ?? [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  String _productName(Map<String, dynamic> p) {
+    return (p['name'] ?? p['product_name'] ?? p['medicine_name'] ?? '-')
+        .toString();
+  }
+
+  int _productQty(Map<String, dynamic> p) {
+    return (p['quantity'] ?? p['qty'] ?? 0) as int? ?? 0;
+  }
+
+  double _productPtr(Map<String, dynamic> p) {
+    final v = p['ptr'] ?? p['sell_price_to_retailer'] ?? p['price_per_unit'];
+    return (v as num?)?.toDouble() ?? 0.0;
+  }
+
+  double _productTotal(Map<String, dynamic> p) {
+    final v = p['total_price'] ?? p['line_total'] ?? p['order_price'];
+    return (v as num?)?.toDouble() ?? 0.0;
+  }
+
+  String _productMeta(Map<String, dynamic> p) {
+    final parts = [
+      (p['sku_code'] ?? '').toString(),
+      (p['brand_name'] ?? '').toString(),
+      (p['unit'] ?? p['primary_unit'] ?? '').toString(),
+    ].where((e) => e.trim().isNotEmpty).toList();
+    return parts.join(' · ');
+  }
+
   int _productCount(Map<String, dynamic> order) {
     return (order['products'] as List? ?? []).length;
   }
@@ -962,14 +998,12 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
             final i = entry.key;
             final product = entry.value;
 
-            final qty = ((product['quantity'] as num?)?.toInt() ?? 0);
+            final qty = _productQty(product);
             final unit = (product['unit'] ?? product['primary_unit'] ?? '')
                 .toString();
-            final total = (product['total_price'] as num?)?.toDouble() ?? 0.0;
-            final ptr =
-                (product['ptr'] as num?)?.toDouble() ??
-                (product['sell_price'] as num?)?.toDouble() ??
-                0.0;
+            final total = _productTotal(product);
+            final ptr = _productPtr(product);
+            final name = _productName(product);
 
             final subLineParts = [
               (product['sku_code'] ?? '').toString(),
@@ -993,7 +1027,7 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          (product['name'] ?? '-').toString(),
+                          (name).toString(),
                           style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,

@@ -204,9 +204,10 @@ class _ProductPreviewCardState extends State<ProductPreviewCard>
 
   bool get _isLockedElsewhere {
     final cart = widget.cart;
-    return cart.isNotEmpty &&
-        cart.lockedDistributorId != null &&
-        cart.lockedDistributorId != widget.distributorId;
+    if (cart.isEmpty) return false;
+    final activeDistributorId = cart.items.first.distributorId;
+    return activeDistributorId.isNotEmpty &&
+        activeDistributorId != widget.distributorId;
   }
 
   String _s(
@@ -1484,6 +1485,7 @@ class _ProductPreviewCardState extends State<ProductPreviewCard>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          /*
           if (lockedElsewhere)
             Container(
               width: double.infinity,
@@ -1495,7 +1497,7 @@ class _ProductPreviewCardState extends State<ProductPreviewCard>
                 border: Border.all(color: const Color(0xFFF3D19C)),
               ),
               child: Text(
-                'Cart is locked to ${widget.cart.lockedDistributorName ?? 'another distributor'}. Clear cart to order from ${widget.distributorName}.',
+                'Cart is locked to ${widget.cart.items.isNotEmpty ? widget.cart.items.first.distributorName : 'another distributor'}. Clear cart to order from ${widget.distributorName}.',
                 style: _t(
                   fontSize: 11,
                   color: const Color(0xFF9A5A00),
@@ -1503,6 +1505,8 @@ class _ProductPreviewCardState extends State<ProductPreviewCard>
                 ),
               ),
             ),
+            */
+          /*
           Row(
             children: [
               Expanded(
@@ -1599,6 +1603,7 @@ class _ProductPreviewCardState extends State<ProductPreviewCard>
               */
             ],
           ),
+          */
         ],
       ),
     );

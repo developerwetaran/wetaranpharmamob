@@ -201,56 +201,29 @@ class PharmaCartItem {
   );
 
   Map<String, dynamic> toOrderProduct() => {
-    'sku_id': skuId,
-    'name': skuName,
-    'sku_code': skuCode,
-    'category': category ?? productCategory ?? 'Uncategorised',
-    'image_path': imagePath ?? '',
-    'distributor_id': distributorId,
-    'distributor_name': distributorName,
-    'variant_id': variantId,
-    'variant_name': variantName,
-    'variant_sku_code': variantSkuCode,
-    'primary_unit': primaryUnit,
-    'unit': unit,
-    'sell_price': pricePerUnit,
     'ptr': ptr,
-    'mrp': mrp,
-    'min_sell_price': minSellPrice,
-    'discount_percent': discountPercent,
+    'qty': quantity,
     'quantity': quantity,
-    'total_price': totalPrice,
-    'available_stock': availableStock,
-    'generic_name': genericName ?? '',
-    'dosage_form': dosageForm ?? '',
-    'pack_label': packLabel ?? '',
-    'batch_number': batchNumber ?? '',
-    'expiry_date': expiryDate ?? '',
-    'manufacturer_name': manufacturerName ?? '',
-    'marketer_name': marketerName ?? '',
-    'medicine_code': medicineCode ?? '',
-    'brand_name': brandName ?? '',
-    'extra_info': extraInfo ?? const {},
+    'line_total': totalPrice,
+    'order_price': totalPrice,
+    'product_name': skuName,
+    'price_per_unit': pricePerUnit,
+    'pharma_stock_id': skuId,
+    'medicine_repository_id': null,
+    'sell_price_to_retailer': pricePerUnit,
   };
 }
 
 class PharmaCartProvider extends ChangeNotifier {
   static const _prefKey = 'wetaran_pharma_cart_v3';
 
-  List<PharmaCartItem> _items = [];
-  String? _lockedDistributorId;
-  String? _lockedDistributorName;
+  final List<PharmaCartItem> _items = [];
 
   List<PharmaCartItem> get items => List.unmodifiable(_items);
-  String? get lockedDistributorId => _lockedDistributorId;
-  String? get lockedDistributorName => _lockedDistributorName;
   bool get isEmpty => _items.isEmpty;
   bool get isNotEmpty => _items.isNotEmpty;
   int get itemCount => _items.length;
   double get subtotal => _items.fold(0, (sum, item) => sum + item.totalPrice);
-
-  bool canAddFromDistributor(String distributorId) =>
-      _items.isEmpty || _lockedDistributorId == distributorId;
 
   bool isVariantInCart(String variantId, String unit) =>
       _items.any((i) => i.variantId == variantId && i.unit == unit);
@@ -270,13 +243,6 @@ class PharmaCartProvider extends ChangeNotifier {
   }
 
   bool addItem(PharmaCartItem item) {
-    if (!canAddFromDistributor(item.distributorId)) return false;
-
-    if (_items.isEmpty) {
-      _lockedDistributorId = item.distributorId;
-      _lockedDistributorName = item.distributorName;
-    }
-
     final idx = _items.indexWhere(
       (i) => i.variantId == item.variantId && i.unit == item.unit,
     );
@@ -334,34 +300,14 @@ class PharmaCartProvider extends ChangeNotifier {
 
   void removeItem(String variantId, String unit) {
     _items.removeWhere((i) => i.variantId == variantId && i.unit == unit);
-    if (_items.isEmpty) {
-      _resetLock();
-    }
     _persist();
     notifyListeners();
   }
 
   void clear() {
     _items.clear();
-    _resetLock();
     _persist();
     notifyListeners();
-  }
-
-  void lockDistributor(String id, String name) {
-    if (_items.isNotEmpty && _lockedDistributorId != id) return;
-    _lockedDistributorId = id;
-    _lockedDistributorName = name;
-    _persist();
-    notifyListeners();
-  }
-
-  void clearDistributorLockIfEmpty() {
-    if (_items.isEmpty && _lockedDistributorId != null) {
-      _resetLock();
-      _persist();
-      notifyListeners();
-    }
   }
 
   int _resolveMax(PharmaCartItem item) {
@@ -396,11 +342,6 @@ class PharmaCartProvider extends ChangeNotifier {
     return fallbackStock > 0 ? fallbackStock : 0;
   }
 
-  void _resetLock() {
-    _lockedDistributorId = null;
-    _lockedDistributorName = null;
-  }
-
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -408,13 +349,18 @@ class PharmaCartProvider extends ChangeNotifier {
       if (raw == null) return;
 
       final map = jsonDecode(raw) as Map<String, dynamic>;
-      _lockedDistributorId = map['lockedDistributorId'] as String?;
-      _lockedDistributorName = map['lockedDistributorName'] as String?;
-      _items = (map['items'] as List? ?? [])
-          .map(
-            (e) => PharmaCartItem.fromJson(Map<String, dynamic>.from(e as Map)),
-          )
-          .toList();
+      final rawItems = map['items'] as List? ?? [];
+      _items
+        ..clear()
+        ..addAll(
+          rawItems
+              .map(
+                (e) => PharmaCartItem.fromJson(
+                  Map<String, dynamic>.from(e as Map),
+                ),
+              )
+              .toList(),
+        );
 
       notifyListeners();
     } catch (e) {
@@ -427,11 +373,7 @@ class PharmaCartProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         _prefKey,
-        jsonEncode({
-          'lockedDistributorId': _lockedDistributorId,
-          'lockedDistributorName': _lockedDistributorName,
-          'items': _items.map((i) => i.toJson()).toList(),
-        }),
+        jsonEncode({'items': _items.map((i) => i.toJson()).toList()}),
       );
     } catch (e) {
       print('PharmaCartProvider._persist error: $e');

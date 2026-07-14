@@ -61,7 +61,7 @@ class _SplashPageState extends State<SplashPage>
             children: [
               Image.asset(
                 'assets/images/wetaran_pharma_logo.png',
-                height: 250,
+                height: 220,
                 fit: BoxFit.contain,
               ),
               const SizedBox(

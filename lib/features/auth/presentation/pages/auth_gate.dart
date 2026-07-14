@@ -188,6 +188,7 @@ class _ProfileStatusResolverState extends State<_ProfileStatusResolver> {
             return CompleteProfilePage(
               email: result.email,
               businessName: result.businessName,
+              allowBack: false,
             );
 
           case _ResolvedProfileType.complete:

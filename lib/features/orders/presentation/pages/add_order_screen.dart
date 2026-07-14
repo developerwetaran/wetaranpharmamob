@@ -7,8 +7,8 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wetaran_pharma/core/widgets/app_drawer.dart';
 import 'package:wetaran_pharma/features/orders/models/pharma_cart_provider.dart';
-import 'package:wetaran_pharma/features/orders/presentation/pages/pharma_preview_order_page.dart';
 import 'package:wetaran_pharma/features/orders/presentation/widgets/comparison_sheet.dart';
+import 'package:wetaran_pharma/features/orders/presentation/widgets/pharma_cart_sheet.dart';
 import 'package:wetaran_pharma/features/orders/presentation/widgets/product_preview_card.dart';
 import 'package:wetaran_pharma/features/orders/services/pharma_distributor_service.dart';
 import 'package:wetaran_pharma/models/sku_model.dart';
@@ -30,6 +30,7 @@ const redSoft = Color(0xFFFBEAEA);
 const pageBg = Color(0xFFF3F7FA);
 const kBlue = Color(0xFF0B4F8A);
 const kBlueDk = Color(0xFF083A66);
+const kBlueSoft = Color(0xFFE4EDF7);
 
 enum PharmaOrderViewMode { bySku, byDistributor }
 
@@ -115,15 +116,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
       });
 
       if (distributors.isNotEmpty) {
-        final cart = context.read<PharmaCartProvider>();
-        final lockedId = cart.lockedDistributorId;
-
-        final hasLocked =
-            lockedId != null &&
-            lockedId.isNotEmpty &&
-            distributors.any((d) => d.id == lockedId);
-
-        selectDistributor(hasLocked ? lockedId : distributors.first.id);
+        selectDistributor(distributors.first.id);
       } else {
         buildMergedMap();
       }
@@ -137,17 +130,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
   }
 
   void onDistributorChipTap(String id, PharmaCartProvider cart) {
-    if (cart.isNotEmpty &&
-        cart.lockedDistributorId != null &&
-        cart.lockedDistributorId != id) {
-      showDistributorSwitchDialog(
-        cart: cart,
-        newDistId: id,
-        newDistName: distributors.firstWhere((d) => d.id == id).companyName,
-      );
-      return;
-    }
-
     selectDistributor(id);
   }
 
@@ -944,31 +926,10 @@ class AddOrderScreenState extends State<AddOrderScreen> {
   }
 
   Widget buildDistributorChips(PharmaCartProvider cart) {
-    final lockedId = cart.lockedDistributorId;
-    final isLocked = cart.isNotEmpty && lockedId != null && lockedId.isNotEmpty;
-
-    // ignore: unnecessary_question_mark
-    final selectedDistributor = distributors.cast<dynamic?>().firstWhere(
+    final selectedDistributor = distributors.cast().firstWhere(
       (d) => d?.id == selectedDistributorId,
       orElse: () => null,
     );
-
-    // ignore: unnecessary_question_mark
-    final lockedDistributor = distributors.cast<dynamic?>().firstWhere(
-      (d) => d?.id == lockedId,
-      orElse: () => null,
-    );
-
-    const kBlue = Color(0xFF0B4F8A);
-    const kBlueSoft = Color(0xFFE4EDF7);
-    const kTeal = Color(0xFF0FA3A3);
-    const kTealSoft = Color(0xFFE2F4F4);
-    const kBg = Color(0xFFF3F7FA);
-    const kLine = Color(0xFFE3EBF1);
-    const kInk = Color(0xFF13242F);
-    const kMuted = Color(0xFF63788A);
-    const kAmber = Color(0xFFB36A00);
-    const kAmberSoft = Color(0xFFFFF4E0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -976,7 +937,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isLocked ? const Color(0xFFF5DFB8) : kLine),
+        border: Border.all(color: kLine),
         boxShadow: const [
           BoxShadow(
             color: Color(0x120B4F8A),
@@ -991,14 +952,10 @@ class AddOrderScreenState extends State<AddOrderScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: isLocked ? kAmberSoft : kBlueSoft,
+              color: kBlueSoft,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              isLocked ? Icons.lock_outline_rounded : Icons.business_outlined,
-              color: isLocked ? kAmber : kBlue,
-              size: 18,
-            ),
+            child: const Icon(Icons.business_outlined, color: kBlue, size: 18),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1006,82 +963,53 @@ class AddOrderScreenState extends State<AddOrderScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Distributor',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: kMuted,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 3),
-                if (isLocked)
-                  Text(
-                    lockedDistributor?.companyName ??
-                        cart.lockedDistributorName ??
-                        lockedId,
-                    overflow: TextOverflow.ellipsis,
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: selectedDistributorId,
+                    isExpanded: true,
+                    isDense: true,
+                    dropdownColor: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: kInk,
                     ),
-                  )
-                else
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedDistributorId,
-                      isExpanded: true,
-                      isDense: true,
-                      dropdownColor: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: kInk,
-                      ),
-                      icon: const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: kBlue,
-                        size: 20,
-                      ),
-                      items: distributors.map<DropdownMenuItem<String>>((dist) {
-                        return DropdownMenuItem<String>(
-                          // ignore: unnecessary_cast
-                          value: dist.id as String,
-                          child: Text(
-                            // ignore: dead_code
-                            dist.companyName ?? dist.id,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: kInk,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (id) {
-                        if (id == null) return;
-
-                        final lockedElsewhere =
-                            cart.isNotEmpty &&
-                            cart.lockedDistributorId != null &&
-                            cart.lockedDistributorId != id;
-
-                        if (lockedElsewhere) {
-                          showDistributorLockInfo(
-                            cart.lockedDistributorName ?? 'another distributor',
-                          );
-                          return;
-                        }
-
-                        selectDistributor(id);
-                      },
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: kBlue,
+                      size: 20,
                     ),
+                    items: distributors.map<DropdownMenuItem<String>>((dist) {
+                      return DropdownMenuItem<String>(
+                        value: dist.id as String,
+                        child: Text(
+                          dist.companyName ?? dist.id,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: kInk,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (id) {
+                      if (id == null) return;
+                      selectDistributor(id);
+                    },
                   ),
-                if (!isLocked &&
-                    selectedDistributor != null &&
+                ),
+                if (selectedDistributor != null &&
                     (selectedDistributor.companyName ?? '').isNotEmpty) ...[
                   const SizedBox(height: 3),
                   const Text(
@@ -1096,130 +1024,19 @@ class AddOrderScreenState extends State<AddOrderScreen> {
               ],
             ),
           ),
-          if (isLocked) ...[
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: kAmberSoft,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Cart Locked',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: kAmber,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 5),
-                GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (dialogCtx) => AlertDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        title: const Text(
-                          'Clear cart to change distributor',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: kInk,
-                          ),
-                        ),
-                        content: const Text(
-                          'Your cart is locked to another distributor. Clear the cart to change distributor.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: kMuted,
-                            height: 1.45,
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogCtx),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
-                                color: kMuted,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              cart.clear();
-                              Navigator.pop(dialogCtx);
-
-                              final fallbackDistributor =
-                                  distributors.isNotEmpty
-                                  ? distributors.first
-                                  : null;
-                              if (fallbackDistributor == null) return;
-
-                              selectDistributor(
-                                // ignore: unnecessary_cast
-                                fallbackDistributor.id as String,
-                              );
-                            },
-                            child: const Text(
-                              'Clear & Change',
-                              style: TextStyle(
-                                color: kTeal,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kTealSoft,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'Change',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: kTeal,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: kBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: kLine),
             ),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: kBg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: kLine),
-              ),
-              child: const Icon(
-                Icons.local_shipping_outlined,
-                size: 15,
-                color: kBlue,
-              ),
+            child: const Icon(
+              Icons.local_shipping_outlined,
+              size: 15,
+              color: kBlue,
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -1446,24 +1263,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                     cart: context.read<PharmaCartProvider>(),
                   );
                 },
-                onSwitchDistributor: (offer) {
-                  final cart = context.read<PharmaCartProvider>();
-
-                  showDistributorSwitchDialog(
-                    cart: cart,
-                    newDistId: offer.distributorId,
-                    newDistName: offer.distributorName,
-                    onSwitched: () {
-                      addToCart(
-                        product: offer.product,
-                        variant: offer.variant,
-                        distributorId: offer.distributorId,
-                        distributorName: offer.distributorName,
-                        cart: cart,
-                      );
-                    },
-                  );
-                },
               );
             });
           },
@@ -1634,10 +1433,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
     final isInCart = cart.isVariantInCart(variantId, primaryUnit);
     final distributorId = selectedDistributorId ?? '';
     final distributor = selectedDist;
-    final lockedElsewhere =
-        cart.isNotEmpty &&
-        cart.lockedDistributorId != null &&
-        cart.lockedDistributorId != distributorId;
     final hasDiscount = mrp > 0 && mrp > sellPrice;
     final discountPct = hasDiscount ? ((mrp - sellPrice) / mrp) * 100 : 0.0;
 
@@ -1856,7 +1651,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                       showDistributorComparisonDialog(
                         context: context,
                         title: product.name,
-                        offers: offers,
+                        offers: buildComparisonOffers(product),
                         onAddOffer: (offer) {
                           addToCart(
                             product: offer.product,
@@ -1864,24 +1659,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                             distributorId: offer.distributorId,
                             distributorName: offer.distributorName,
                             cart: context.read<PharmaCartProvider>(),
-                          );
-                        },
-                        onSwitchDistributor: (offer) {
-                          final cart = context.read<PharmaCartProvider>();
-
-                          showDistributorSwitchDialog(
-                            cart: cart,
-                            newDistId: offer.distributorId,
-                            newDistName: offer.distributorName,
-                            onSwitched: () {
-                              addToCart(
-                                product: offer.product,
-                                variant: offer.variant,
-                                distributorId: offer.distributorId,
-                                distributorName: offer.distributorName,
-                                cart: cart,
-                              );
-                            },
                           );
                         },
                       );
@@ -1899,21 +1676,16 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                       children: const [
                         Icon(
                           Icons.compare_arrows_rounded,
-                          size: 14,
+                          size: 16,
                           color: Colors.white,
                         ),
-                        SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            'Compare',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Compare',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -1923,9 +1695,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            if (lockedElsewhere)
-              buildLockedBanner(cart)
-            else if (isInCart && !hasMultipleVariants)
+            if (isInCart && !hasMultipleVariants)
               buildQtyStepper(
                 variantId: variantId,
                 unit: primaryUnit,
@@ -1933,6 +1703,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                 max: stock.toInt(),
                 allowBeyond: allowBeyond,
                 cart: cart,
+                compact: false,
               )
             else
               SizedBox(
@@ -1979,19 +1750,15 @@ class AddOrderScreenState extends State<AddOrderScreen> {
   }
 
   void _syncSelectedDistributorWithCart(PharmaCartProvider cart) {
-    final lockedId = cart.lockedDistributorId;
     if (viewMode != PharmaOrderViewMode.byDistributor) return;
-    if (lockedId == null || lockedId.isEmpty) return;
-    if (selectedDistributorId == lockedId) return;
-
-    final exists = distributors.any((d) => d.id == lockedId);
-    if (!exists) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (selectedDistributorId == lockedId) return;
-      selectDistributor(lockedId);
-    });
+    if (selectedDistributorId == null) return;
+    if (distributors.any((d) => d.id == selectedDistributorId)) return;
+    if (distributors.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        selectDistributor(distributors.first.id);
+      });
+    }
   }
 
   Widget buildQtyStepper({
@@ -2214,17 +1981,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
     );
 
     final added = cart.addItem(item);
-    if (!added) {
-      showDistributorSwitchDialog(
-        cart: cart,
-        newDistId: distributorId,
-        newDistName: distributorName,
-        onSwitched: () {
-          cart.addItem(item);
-        },
-      );
-      return;
-    }
+    if (!added) return;
 
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -2279,10 +2036,10 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                'Your cart has items from ${cart.lockedDistributorName}. Switching to $newDistName will clear your current cart.',
+              const Text(
+                'Switching distributors will clear your current cart.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   height: 1.5,
                   color: mutedColor,
@@ -2343,12 +2100,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
   }
 
   void showCartSheet(PharmaCartProvider cart) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PharmaCartSheet(cart: cart),
-    );
+    showPharmaCartSheet(context);
   }
 
   void showDistributorLockInfo(String lockedName) {
@@ -2543,27 +2295,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
               style: TextButton.styleFrom(foregroundColor: primaryBlue),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget buildLockedBanner(PharmaCartProvider cart) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: amberSoft,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFDE68A)),
-      ),
-      child: Text(
-        'Cart locked to ${cart.lockedDistributorName}. Clear cart to order from another distributor.',
-        style: const TextStyle(
-          fontSize: 11,
-          color: amber,
-          fontWeight: FontWeight.w600,
-          height: 1.4,
         ),
       ),
     );
@@ -2826,8 +2557,11 @@ class AddOrderScreenState extends State<AddOrderScreen> {
 
     return InkWell(
       borderRadius: BorderRadius.circular(20),
-      onTap: () =>
-          showMergedVariantPicker(sample: sample, offers: offers, cart: cart),
+      onTap: () => showMergedVariantPicker(
+        sample: sample,
+        offers: offers.cast<MapEntry<dynamic, SkuProduct>>(),
+        cart: cart,
+      ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
@@ -3032,24 +2766,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                               distributorId: offer.distributorId,
                               distributorName: offer.distributorName,
                               cart: context.read<PharmaCartProvider>(),
-                            );
-                          },
-                          onSwitchDistributor: (offer) {
-                            final cart = context.read<PharmaCartProvider>();
-
-                            showDistributorSwitchDialog(
-                              cart: cart,
-                              newDistId: offer.distributorId,
-                              newDistName: offer.distributorName,
-                              onSwitched: () {
-                                addToCart(
-                                  product: offer.product,
-                                  variant: offer.variant,
-                                  distributorId: offer.distributorId,
-                                  distributorName: offer.distributorName,
-                                  cart: cart,
-                                );
-                              },
                             );
                           },
                         );
@@ -3385,26 +3101,12 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                               v.primaryUnit,
                                             );
 
-                                            final isThisDistributorSelected =
-                                                variantExistsInCart &&
-                                                liveCart.lockedDistributorId ==
-                                                    dist.id;
-
-                                            final isLockedElsewhere =
-                                                liveCart.isNotEmpty &&
-                                                liveCart.lockedDistributorId !=
-                                                    null &&
-                                                liveCart.lockedDistributorId !=
-                                                    dist.id;
-
                                             final outOfStock =
                                                 v.availableStock <= 0;
-
                                             final hasDiscount =
                                                 v.maxRetailPrice > 0 &&
                                                 v.maxRetailPrice >
                                                     v.sellPriceToRetailer;
-
                                             final discountPercent = hasDiscount
                                                 ? ((v.maxRetailPrice -
                                                               v.sellPriceToRetailer) /
@@ -3412,38 +3114,21 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                       100
                                                 : 0.0;
 
-                                            final tileBg =
-                                                isThisDistributorSelected
-                                                ? const Color(0xFFF0FFF4)
-                                                : isLockedElsewhere
-                                                ? const Color(0xFFFFFBF5)
-                                                : const Color(0xFFF8FBFF);
-
-                                            final tileBorder =
-                                                isThisDistributorSelected
-                                                ? const Color(0xFFB7E4C7)
-                                                : isLockedElsewhere
-                                                ? const Color(0xFFF3D19C)
-                                                : const Color(0xFFDDE3FF);
-
-                                            final buttonColor =
-                                                isThisDistributorSelected
-                                                ? const Color(0xFF2E7D32)
-                                                : isLockedElsewhere
-                                                ? const Color(0xFFEF8F21)
-                                                : primaryBlue;
-
                                             return Container(
                                               margin: const EdgeInsets.only(
                                                 bottom: 10,
                                               ),
                                               padding: const EdgeInsets.all(12),
                                               decoration: BoxDecoration(
-                                                color: tileBg,
+                                                color: variantExistsInCart
+                                                    ? const Color(0xFFF0FFF4)
+                                                    : const Color(0xFFF8FBFF),
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 border: Border.all(
-                                                  color: tileBorder,
+                                                  color: variantExistsInCart
+                                                      ? const Color(0xFFB7E4C7)
+                                                      : const Color(0xFFDDE3FF),
                                                 ),
                                               ),
                                               child: Column(
@@ -3515,7 +3200,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                             const SizedBox(
                                                               height: 4,
                                                             ),
-                                                            if (isThisDistributorSelected)
+                                                            if (variantExistsInCart)
                                                               Row(
                                                                 children: [
                                                                   const Icon(
@@ -3548,19 +3233,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                                   ),
                                                                 ],
                                                               )
-                                                            else if (isLockedElsewhere)
-                                                              const Text(
-                                                                'Select this distributor to replace current cart',
-                                                                style: TextStyle(
-                                                                  fontSize: 11,
-                                                                  color: Color(
-                                                                    0xFFB26A00,
-                                                                  ),
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                ),
-                                                              )
                                                             else
                                                               const Text(
                                                                 'Tap to add from this distributor',
@@ -3585,9 +3257,9 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                             ),
                                                         decoration: BoxDecoration(
                                                           color: outOfStock
-                                                              ? v.allowOrderBeyondStock
+                                                              ? (v.allowOrderBeyondStock
                                                                     ? amberSoft
-                                                                    : redSoft
+                                                                    : redSoft)
                                                               : greenSoft,
                                                           borderRadius:
                                                               BorderRadius.circular(
@@ -3699,46 +3371,10 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                       ),
                                                     ],
                                                   ),
-                                                  if (isLockedElsewhere) ...[
-                                                    const SizedBox(height: 10),
-                                                    Container(
-                                                      width: double.infinity,
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 10,
-                                                            vertical: 8,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: amberSoft,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
-                                                        border: Border.all(
-                                                          color: const Color(
-                                                            0xFFF3D19C,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: Text(
-                                                        'Current cart is locked to ${liveCart.lockedDistributorName ?? 'another distributor'}. Switch to ${dist.companyName}.',
-                                                        style: const TextStyle(
-                                                          fontSize: 11,
-                                                          height: 1.35,
-                                                          color: Color(
-                                                            0xFF9A5A00,
-                                                          ),
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
                                                   const SizedBox(height: 10),
                                                   SizedBox(
                                                     width: double.infinity,
-                                                    child:
-                                                        isThisDistributorSelected
+                                                    child: variantExistsInCart
                                                         ? buildQtyStepper(
                                                             variantId: v.id,
                                                             unit: v.primaryUnit,
@@ -3757,35 +3393,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                                     !v.allowOrderBeyondStock
                                                                 ? null
                                                                 : () {
-                                                                    if (isLockedElsewhere) {
-                                                                      showDistributorSwitchDialog(
-                                                                        cart:
-                                                                            liveCart,
-                                                                        newDistId:
-                                                                            dist.id,
-                                                                        newDistName:
-                                                                            dist.companyName,
-                                                                        onSwitched: () {
-                                                                          Navigator.pop(
-                                                                            ctx2,
-                                                                          );
-                                                                          addToCart(
-                                                                            product:
-                                                                                product,
-                                                                            variant:
-                                                                                v,
-                                                                            distributorId:
-                                                                                dist.id,
-                                                                            distributorName:
-                                                                                dist.companyName,
-                                                                            cart:
-                                                                                liveCart,
-                                                                          );
-                                                                        },
-                                                                      );
-                                                                      return;
-                                                                    }
-
                                                                     addToCart(
                                                                       product:
                                                                           product,
@@ -3798,22 +3405,20 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                                       cart:
                                                                           liveCart,
                                                                     );
+                                                                    Navigator.pop(
+                                                                      ctx2,
+                                                                    );
                                                                   },
-                                                            icon: Icon(
-                                                              isLockedElsewhere
-                                                                  ? Icons
-                                                                        .swap_horiz_rounded
-                                                                  : Icons
-                                                                        .add_shopping_cart_rounded,
+                                                            icon: const Icon(
+                                                              Icons
+                                                                  .add_shopping_cart_rounded,
                                                               size: 18,
                                                               color:
                                                                   Colors.white,
                                                             ),
-                                                            label: Text(
-                                                              isLockedElsewhere
-                                                                  ? 'Select from this distributor'
-                                                                  : 'Add to cart',
-                                                              style: const TextStyle(
+                                                            label: const Text(
+                                                              'Add to cart',
+                                                              style: TextStyle(
                                                                 color: Colors
                                                                     .white,
                                                                 fontWeight:
@@ -3824,7 +3429,7 @@ class AddOrderScreenState extends State<AddOrderScreen> {
                                                             style: ElevatedButton.styleFrom(
                                                               elevation: 0,
                                                               backgroundColor:
-                                                                  buttonColor,
+                                                                  primaryBlue,
                                                               disabledBackgroundColor:
                                                                   const Color(
                                                                     0xFFCBD5E1,
@@ -3899,597 +3504,6 @@ class AddOrderScreenState extends State<AddOrderScreen> {
           ),
         );
       },
-    );
-  }
-}
-
-class PharmaCartSheet extends StatelessWidget {
-  final PharmaCartProvider cart;
-
-  const PharmaCartSheet({super.key, required this.cart});
-
-  @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: cart,
-      child: Consumer<PharmaCartProvider>(
-        builder: (context, cart, _) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-            ),
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.85,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: borderColor,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Your Cart',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: headingColor,
-                          ),
-                        ),
-                      ),
-                      if (cart.isNotEmpty)
-                        TextButton.icon(
-                          onPressed: () => showClearCartDialog(context, cart),
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            size: 16,
-                            color: red,
-                          ),
-                          label: const Text(
-                            'Clear',
-                            style: TextStyle(
-                              color: red,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                          ),
-                        ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: mutedColor,
-                          size: 20,
-                        ),
-                        style: IconButton.styleFrom(
-                          backgroundColor: pageBg,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (cart.lockedDistributorName != null) ...[
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.store_outlined,
-                          size: 14,
-                          color: primaryBlue,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'From ${cart.lockedDistributorName}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: primaryBlue,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: borderColor),
-                if (cart.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.shopping_cart_outlined,
-                          size: 48,
-                          color: borderColor,
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          'Your cart is empty',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: mutedColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  Flexible(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                      shrinkWrap: true,
-                      itemCount: cart.items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) {
-                        final item = cart.items[i];
-                        return CartItemRow(item: item, cart: cart);
-                      },
-                    ),
-                  ),
-                if (cart.isNotEmpty) ...[
-                  const Divider(height: 1, color: borderColor),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                    child: Column(
-                      children: [
-                        SummaryRow(
-                          label: 'Subtotal',
-                          value: cart.subtotal.toStringAsFixed(2),
-                        ),
-                        const SizedBox(height: 8),
-                        const Divider(color: borderColor),
-                        const SizedBox(height: 6),
-                        SummaryRow(
-                          label: 'Total',
-                          value: cart.subtotal.toStringAsFixed(2),
-                          bold: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      14,
-                      16,
-                      MediaQuery.of(context).padding.bottom + 16,
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  PharmaPreviewOrderPage(cart: cart),
-                            ),
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 18,
-                          color: Colors.white,
-                        ),
-                        label: const Text(
-                          'Proceed to Preview',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryBlue,
-                          elevation: 0,
-                          minimumSize: const Size.fromHeight(54),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void showClearCartDialog(BuildContext context, PharmaCartProvider cart) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: redSoft,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: red,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Clear Cart?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: headingColor,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'All items will be removed from your cart. This cannot be undone.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  color: mutedColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: headingColor,
-                        minimumSize: const Size.fromHeight(46),
-                        side: const BorderSide(color: borderColor),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        cart.clear();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: red,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size.fromHeight(46),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        'Clear Cart',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class CartItemRow extends StatelessWidget {
-  final PharmaCartItem item;
-  final PharmaCartProvider cart;
-
-  const CartItemRow({super.key, required this.item, required this.cart});
-
-  @override
-  Widget build(BuildContext context) {
-    final lineTotal = item.totalPrice;
-    final max = item.availableStock.toInt();
-    final beyond = item.allowOrderBeyondStock;
-    final isNearDelete = item.quantity <= 1;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x080F172A),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: primaryBlueSoft,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.medication_liquid_rounded,
-                  size: 18,
-                  color: primaryBlue,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.skuName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: headingColor,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _metaChip(item.skuCode.isEmpty ? '-' : item.skuCode),
-                        _metaChip(item.variantName),
-                        _metaChip(item.unit),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text(
-                    'Total',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: mutedColor,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    lineTotal.toStringAsFixed(2),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: headingColor,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            decoration: BoxDecoration(
-              color: pageBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: borderColor),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: item.pricePerUnit.toStringAsFixed(2),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: primaryBlue,
-                          ),
-                        ),
-                        const TextSpan(
-                          text: ' / unit',
-                          style: TextStyle(fontSize: 11, color: mutedColor),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: borderColor),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          if (item.quantity <= 1) {
-                            cart.removeItem(item.variantId, item.unit);
-                          } else {
-                            cart.updateQuantity(
-                              item.variantId,
-                              item.unit,
-                              item.quantity - 1,
-                            );
-                          }
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: isNearDelete ? redSoft : pageBg,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isNearDelete ? red : borderColor,
-                            ),
-                          ),
-                          child: Icon(
-                            isNearDelete
-                                ? Icons.delete_outline_rounded
-                                : Icons.remove_rounded,
-                            size: 15,
-                            color: isNearDelete ? red : headingColor,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        constraints: const BoxConstraints(minWidth: 32),
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          '${item.quantity}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: headingColor,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          if (!beyond && max > 0 && item.quantity >= max) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Maximum stock reached'),
-                                backgroundColor: amber,
-                                behavior: SnackBarBehavior.floating,
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                            return;
-                          }
-
-                          cart.updateQuantity(
-                            item.variantId,
-                            item.unit,
-                            item.quantity + 1,
-                          );
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: primaryBlueSoft,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFFBFDBFE)),
-                          ),
-                          child: const Icon(
-                            Icons.add_rounded,
-                            size: 15,
-                            color: primaryBlue,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (!beyond && max > 0) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Available stock: $max ${item.unit}',
-              style: const TextStyle(
-                fontSize: 10.5,
-                color: mutedColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ] else if (beyond) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Ordering beyond stock is allowed',
-              style: TextStyle(
-                fontSize: 10.5,
-                color: amber,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static Widget _metaChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: pageBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: mutedColor,
-        ),
-      ),
     );
   }
 }
