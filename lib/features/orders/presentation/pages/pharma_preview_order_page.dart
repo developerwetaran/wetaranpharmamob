@@ -380,100 +380,156 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
         context: context,
         barrierDismissible: false,
         barrierColor: Colors.black.withOpacity(0.45),
-        builder: (_) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 22),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x220A2451),
-                  blurRadius: 28,
-                  offset: Offset(0, 10),
-                ),
-              ],
+        builder: (_) {
+          final size = MediaQuery.of(context).size;
+          final dialogWidth = size.width < 380 ? size.width * 0.94 : 420.0;
+          final maxHeight = size.height * 0.82;
+
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 24,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: _greenSoft,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_outline_rounded,
-                    color: _green,
-                    size: 36,
-                  ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: dialogWidth,
+                maxHeight: maxHeight,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _card,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x220A2451),
+                      blurRadius: 28,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 18),
-                const Text(
-                  'Orders Placed!',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: _ink,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Your orders have been placed successfully.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: _inkSoft,
-                    height: 1.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ...inserts.map(
-                  (e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      '${e['distributorName']}: ${e['orderId']}',
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: _teal600,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 14),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              color: _greenSoft,
+                              borderRadius: BorderRadius.circular(22),
+                            ),
+                            child: const Icon(
+                              Icons.check_circle_outline_rounded,
+                              color: _green,
+                              size: 36,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'Orders Placed!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: _ink,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Your orders have been placed successfully.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _inkSoft,
+                              height: 1.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () {
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _teal600,
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                        child: Column(
+                          children: [
+                            if (inserts.isNotEmpty) ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF6FBFF),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFFDCE8F5),
+                                  ),
+                                ),
+                                child: Text(
+                                  '${inserts.length} order${inserts.length == 1 ? '' : 's'} created',
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _teal600,
+                                  ),
+                                ),
+                              ),
+                              ...inserts.map(
+                                (e) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _buildPlacedOrderTile(
+                                    distributorName:
+                                        (e['distributorName'] ?? '').toString(),
+                                    orderId: (e['orderId'] ?? '').toString(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
-                    child: const Text(
-                      'Back to Home',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () {
+                            Navigator.of(
+                              context,
+                            ).popUntil((route) => route.isFirst);
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _teal600,
+                            minimumSize: const Size.fromHeight(52),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'Back to Home',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     } catch (e) {
       if (!mounted) return;
@@ -483,6 +539,78 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
         setState(() => _isPlacingOrder = false);
       }
     }
+  }
+
+  Widget _buildPlacedOrderTile({
+    required String distributorName,
+    required String orderId,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4ECF5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF8EE),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.receipt_long_rounded,
+              color: _green,
+              size: 19,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  distributorName.isEmpty ? '-' : distributorName,
+                  softWrap: true,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F8FF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    orderId.isEmpty ? '-' : orderId,
+                    softWrap: true,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: _teal600,
+                      height: 1.25,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String formatDuration(Duration d) {
@@ -732,7 +860,18 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
           ...group.items.asMap().entries.map((entry) {
             final idx = entry.key;
             final item = entry.value;
-            return _buildItemRow(item, isLast: idx == group.items.length - 1);
+            return _SummaryItemTile(
+              item: item,
+              isLast: idx == group.items.length - 1,
+              onQtyChanged: (newQty) {
+                widget.cart.updateQuantity(item.variantId, item.unit, newQty);
+                setState(() {});
+              },
+              onRemove: () {
+                widget.cart.removeItem(item.variantId, item.unit);
+                setState(() {});
+              },
+            );
           }),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -740,7 +879,7 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Distributor subtotal',
+                  'Distributor Subtotal',
                   style: TextStyle(
                     fontSize: 12.5,
                     color: group.meetsMOV ? _green : _red,
@@ -777,185 +916,6 @@ class _PharmaPreviewOrderPageState extends State<PharmaPreviewOrderPage> {
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildItemRow(PharmaCartItem item, {bool isLast = false}) {
-    final qty = item.quantity;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        border: isLast
-            ? null
-            : const Border(bottom: BorderSide(color: _line, width: 1)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7FAFF),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _line),
-            ),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.medication_outlined,
-              size: 18,
-              color: _inkSoft,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.skuName,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
-                    color: _ink,
-                    height: 1.3,
-                  ),
-                ),
-                if ((item.genericName ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    item.genericName!,
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      color: _inkSoft,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 6),
-                Text(
-                  '${item.pricePerUnit.toStringAsFixed(2)} / ${item.unit}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: _inkSoft,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: _pageBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _borderColor),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _stepBtn(
-                            icon: Icons.remove_rounded,
-                            onTap: qty <= 1
-                                ? null
-                                : () {
-                                    widget.cart.updateQuantity(
-                                      item.variantId,
-                                      item.unit,
-                                      qty - 1,
-                                    );
-                                    setState(() {});
-                                  },
-                          ),
-                          SizedBox(
-                            width: 42,
-                            height: 32,
-                            child: Center(
-                              child: Text(
-                                '$qty',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: _headingColor,
-                                ),
-                              ),
-                            ),
-                          ),
-                          _stepBtn(
-                            icon: Icons.add_rounded,
-                            color: _blue,
-                            onTap: () {
-                              widget.cart.updateQuantity(
-                                item.variantId,
-                                item.unit,
-                                qty + 1,
-                              );
-                              setState(() {});
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '× ₹${item.pricePerUnit.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 10.8,
-                        color: _mutedColor,
-                      ),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () {
-                        widget.cart.removeItem(item.variantId, item.unit);
-                        setState(() {});
-                      },
-                      child: Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: _redSoft,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 17,
-                          color: _red,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            '₹${item.totalPrice.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: _teal600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepBtn({
-    required IconData icon,
-    Color color = _mutedColor,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 34,
-        height: 32,
-        alignment: Alignment.center,
-        child: Icon(icon, size: 17, color: onTap == null ? _faintColor : color),
       ),
     );
   }
@@ -1241,6 +1201,274 @@ Widget metaInfoChip({
           ),
         ),
       ],
+    ),
+  );
+}
+
+class _SummaryItemTile extends StatefulWidget {
+  final PharmaCartItem item;
+  final bool isLast;
+  final ValueChanged<int> onQtyChanged;
+  final VoidCallback onRemove;
+
+  const _SummaryItemTile({
+    required this.item,
+    required this.onQtyChanged,
+    required this.onRemove,
+    this.isLast = false,
+  });
+
+  @override
+  State<_SummaryItemTile> createState() => _SummaryItemTileState();
+}
+
+class _SummaryItemTileState extends State<_SummaryItemTile> {
+  late final TextEditingController _ctrl;
+  late final FocusNode _focus;
+  bool _hasFocus = false;
+  bool _internalUpdate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: '${widget.item.quantity}');
+    _focus = FocusNode()
+      ..addListener(() {
+        if (!mounted) return;
+        setState(() => _hasFocus = _focus.hasFocus);
+        if (!_focus.hasFocus) _submit();
+      });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  int get _maxQty {
+    if (widget.item.allowOrderBeyondStock) return 9999;
+    return widget.item.availableStock.toInt();
+  }
+
+  void _setText(String v) {
+    _internalUpdate = true;
+    _ctrl.value = TextEditingValue(
+      text: v,
+      selection: TextSelection.collapsed(offset: v.length),
+    );
+    _internalUpdate = false;
+  }
+
+  void _submit() {
+    final parsed = int.tryParse(_ctrl.text.trim());
+    if (parsed == null || parsed < 1) {
+      _setText('1');
+      widget.onQtyChanged(1);
+      return;
+    }
+
+    final max = _maxQty;
+    final clamped = max <= 0 ? parsed : parsed.clamp(1, max);
+    _setText('$clamped');
+    widget.onQtyChanged(clamped);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final qty = item.quantity;
+
+    if (!_hasFocus) {
+      final expected = '$qty';
+      if (_ctrl.text != expected) _setText(expected);
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: widget.isLast
+            ? null
+            : const Border(bottom: BorderSide(color: _line, width: 1)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7FAFF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _line),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.medication_outlined,
+              size: 18,
+              color: _inkSoft,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.skuName,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                    height: 1.3,
+                  ),
+                ),
+                if ((item.genericName ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    item.genericName!,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: _inkSoft,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  '${item.pricePerUnit.toStringAsFixed(2)} / ${item.unit}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _inkSoft,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: _pageBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _borderColor),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _stepBtn(
+                            icon: Icons.remove_rounded,
+                            onTap: qty <= 1
+                                ? null
+                                : () => widget.onQtyChanged(qty - 1),
+                          ),
+                          SizedBox(
+                            width: 42,
+                            height: 32,
+                            child: TextField(
+                              controller: _ctrl,
+                              focusNode: _focus,
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: _headingColor,
+                              ),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 7,
+                                ),
+                              ),
+                              onChanged: (_) {
+                                if (_internalUpdate) return;
+                              },
+                              onSubmitted: (_) => _submit(),
+                              onTapOutside: (_) {
+                                _submit();
+                                FocusScope.of(context).unfocus();
+                              },
+                            ),
+                          ),
+                          _stepBtn(
+                            icon: Icons.add_rounded,
+                            color: _blue,
+                            onTap: () => widget.onQtyChanged(qty + 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        '× ₹${item.pricePerUnit.toStringAsFixed(2)}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10.8,
+                          color: _mutedColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '₹${item.totalPrice.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: _teal600,
+                ),
+              ),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: widget.onRemove,
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: _redSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 17,
+                    color: _red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _stepBtn({
+  required IconData icon,
+  Color color = _mutedColor,
+  VoidCallback? onTap,
+}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 34,
+      height: 32,
+      alignment: Alignment.center,
+      child: Icon(icon, size: 17, color: onTap == null ? _faintColor : color),
     ),
   );
 }

@@ -679,7 +679,7 @@ class _LoginHero extends StatelessWidget {
                           style: TextStyle(color: Color(0xFF19C3B3)),
                         ),
                         TextSpan(
-                          text: ' — in one place.',
+                          text: ' - in one place.',
                           style: TextStyle(color: Colors.white),
                         ),
                       ],

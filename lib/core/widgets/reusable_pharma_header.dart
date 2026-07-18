@@ -64,6 +64,7 @@ class PharmaPageHeader extends StatelessWidget {
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
+                      decoration: TextDecoration.none,
                     ),
                   ),
                   if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
@@ -74,6 +75,7 @@ class PharmaPageHeader extends StatelessWidget {
                         fontSize: 11.5,
                         color: Colors.white.withOpacity(0.85),
                         fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ],

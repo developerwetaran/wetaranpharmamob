@@ -54,6 +54,10 @@ class PharmaDistributorService {
     required String? city,
     required String? state,
   }) async {
+    if (pincode == null || pincode.trim().isEmpty) return [];
+
+    final normalizedPincode = pincode.trim().toLowerCase();
+
     final rows =
         await _supabase
                 .from('distributor')
@@ -68,63 +72,40 @@ class PharmaDistributorService {
     final matched = <Map<String, dynamic>>[];
 
     for (final raw in rows) {
-      final row = raw as Map<String, dynamic>;
+      final row = Map<String, dynamic>.from(raw as Map);
       final coverage = row['service_coverage'] as Map<String, dynamic>?;
+
       if (coverage == null) continue;
 
-      final regions = coverage['regions'] as List? ?? [];
-      int matchScore = 0;
+      final regions = (coverage['regions'] as List?) ?? [];
+      bool found = false;
 
-      for (final item in regions) {
-        final region = item as Map<String, dynamic>;
+      for (final regionItem in regions) {
+        final region = Map<String, dynamic>.from(regionItem as Map);
+        final cities = (region['cities'] as List?) ?? [];
 
-        final regionPincode = (region['pincode']?.toString() ?? '')
-            .trim()
-            .toLowerCase();
-        if (pincode != null && pincode.isNotEmpty && regionPincode == pincode) {
-          matchScore = 3;
-          break;
-        }
+        for (final cityItem in cities) {
+          final cityMap = Map<String, dynamic>.from(cityItem as Map);
+          final pincodes =
+              (cityMap['pincodes'] as List?)
+                  ?.map((e) => e.toString().trim().toLowerCase())
+                  .toList() ??
+              [];
 
-        final regionState = (region['state'] as String? ?? '')
-            .trim()
-            .toLowerCase();
-        final cities = region['cities'] as List? ?? [];
-
-        if (state != null && state.isNotEmpty && regionState == state) {
-          matchScore = matchScore < 1 ? 1 : matchScore;
-
-          for (final c in cities) {
-            final cityObj = c as Map<String, dynamic>;
-            final cityName = (cityObj['city'] as String? ?? '')
-                .trim()
-                .toLowerCase();
-            final pincodes = (cityObj['pincodes'] as List? ?? [])
-                .map((e) => e.toString().trim().toLowerCase())
-                .toList();
-
-            if (city != null && city.isNotEmpty && cityName == city) {
-              matchScore = matchScore < 2 ? 2 : matchScore;
-            }
-
-            if (pincode != null &&
-                pincode.isNotEmpty &&
-                pincodes.contains(pincode)) {
-              matchScore = 3;
-              break;
-            }
+          if (pincodes.contains(normalizedPincode)) {
+            found = true;
+            break;
           }
         }
 
-        if (matchScore == 3) break;
+        if (found) break;
       }
 
-      if (matchScore > 0) {
-        matched.add({...row, '_score': matchScore});
+      if (found) {
+        matched.add(row);
       }
     }
 
-    matched.sort((a, b) => (b['_score'] as int).compareTo(a['_score'] as int));
     return matched;
   }
 

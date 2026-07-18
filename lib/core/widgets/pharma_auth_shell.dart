@@ -170,7 +170,7 @@ class _SignupHero extends StatelessWidget {
                             style: TextStyle(color: teal500),
                           ),
                           TextSpan(
-                            text: ' — in one place.',
+                            text: ' - in one place.',
                             style: TextStyle(color: white),
                           ),
                         ],

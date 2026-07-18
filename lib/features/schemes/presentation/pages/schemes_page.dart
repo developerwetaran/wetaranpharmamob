@@ -133,7 +133,7 @@ class SchemesPage extends StatefulWidget {
 class _SchemesPageState extends State<SchemesPage> {
   final List<Map<String, String>> _schemes = [
     {
-      'title': 'Dolo 650 — Buy 10 strips, get 1 free',
+      'title': 'Dolo 650 - Buy 10 strips, get 1 free',
       'party': 'Micro Labs · Manufacturer',
       'meta': 'Valid till 15 Jul · Min. order 10 strips',
     },
@@ -143,7 +143,7 @@ class _SchemesPageState extends State<SchemesPage> {
       'meta': 'Valid till 31 Jul · Pincode 400058',
     },
     {
-      'title': 'Augmentin 625 Duo — 5 + 1 scheme',
+      'title': 'Augmentin 625 Duo - 5 + 1 scheme',
       'party': 'GSK · Manufacturer',
       'meta': 'Valid till 20 Jul · All distributors',
     },

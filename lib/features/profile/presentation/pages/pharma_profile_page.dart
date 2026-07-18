@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wetaran_pharma/features/auth/presentation/pages/complete_profile_page.dart';
+import 'package:wetaran_pharma/features/profile/presentation/pages/edit_profile.dart';
 
 class PharmaProfilePage extends StatefulWidget {
   const PharmaProfilePage({super.key});
@@ -86,6 +87,16 @@ class _PharmaProfilePageState extends State<PharmaProfilePage> {
   }
 
   Future<void> _openEditPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const EditProfilePageNew()),
+    );
+
+    if (!mounted) return;
+    _loadProfile();
+  }
+
+  Future<void> openEditPage() async {
     final businessName = (_profile?['business_name'] ?? '').toString();
     final userEmail = (_profile?['email'] ?? '').toString();
 
@@ -309,6 +320,7 @@ class _PharmaProfilePageState extends State<PharmaProfilePage> {
     final phone = _display(profile?['phone_number']?.toString());
     final contactPerson = _display(profile?['contact_person_name']?.toString());
     final address = _display(profile?['business_address']?.toString());
+    final area = _display(profile?['area']?.toString());
     final city = _display(profile?['business_city']?.toString());
     final state = _display(profile?['business_state']?.toString());
     final pincode = _display(profile?['business_pincode']?.toString());
@@ -568,6 +580,7 @@ class _PharmaProfilePageState extends State<PharmaProfilePage> {
                             icon: Icons.location_on_outlined,
                             children: [
                               _infoRow('Business Address', address),
+                              _infoRow('Area', area),
                               _infoRow('City', city),
                               _infoRow('State', state),
                               _infoRow('Pincode', pincode),

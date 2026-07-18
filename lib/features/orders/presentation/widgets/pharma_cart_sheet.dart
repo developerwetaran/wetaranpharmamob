@@ -516,7 +516,7 @@ class _PharmaCartSheetState extends State<_PharmaCartSheet> {
               const SizedBox(width: 10),
               Expanded(
                 child: _summaryMini(
-                  label: 'Total',
+                  label: 'Order Total',
                   value: '₹${cart.subtotal.toStringAsFixed(2)}',
                 ),
               ),
@@ -1164,7 +1164,7 @@ class _CartItemTileState extends State<_CartItemTile> {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  'Line total: ₹${item.totalPrice.toStringAsFixed(2)}',
+                  'Total: ₹${item.totalPrice.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 11.2,
                     fontWeight: FontWeight.w600,

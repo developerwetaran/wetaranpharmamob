@@ -12,8 +12,10 @@ import 'package:wetaran_pharma/features/orders/services/pharma_kpi_service.dart'
 import 'package:wetaran_pharma/features/profile/models/pharma_user_profile.dart';
 import 'package:wetaran_pharma/features/profile/presentation/pages/pharma_profile_page.dart';
 import 'package:wetaran_pharma/features/profile/services/pharm_profile_service.dart';
+import 'package:wetaran_pharma/features/purchase_history/purchase_history.dart';
 import 'package:wetaran_pharma/features/reports/presentation/pages/reports_page.dart';
 import 'package:wetaran_pharma/features/rewards/presentation/pages/rewards_page.dart';
+import 'package:wetaran_pharma/features/rx_subscription/presentation/pages/rx_subscription.dart';
 import 'package:wetaran_pharma/features/schemes/presentation/pages/schemes_page.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
@@ -123,14 +125,7 @@ class _MainShellState extends State<MainShell> {
                   currentIndex: _currentIndex,
                   onTap: () => _selectPage(1),
                 ),
-                _BottomNavItem(
-                  icon: Icons.local_offer_outlined,
-                  activeIcon: Icons.local_offer,
-                  label: 'Schemes',
-                  index: 2,
-                  currentIndex: _currentIndex,
-                  onTap: () => _selectPage(2),
-                ),
+
                 _BottomNavItem(
                   icon: Icons.star_border_rounded,
                   activeIcon: Icons.star_rounded,
@@ -139,6 +134,7 @@ class _MainShellState extends State<MainShell> {
                   currentIndex: _currentIndex,
                   onTap: () => _selectPage(3),
                 ),
+
                 _BottomNavItem(
                   icon: Icons.schedule_outlined,
                   activeIcon: Icons.schedule_rounded,
@@ -150,10 +146,18 @@ class _MainShellState extends State<MainShell> {
                 _BottomNavItem(
                   icon: Icons.bar_chart_outlined,
                   activeIcon: Icons.bar_chart_rounded,
-                  label: 'Reports',
+                  label: 'Intelligence',
                   index: 5,
                   currentIndex: _currentIndex,
                   onTap: () => _selectPage(5),
+                ),
+                _BottomNavItem(
+                  icon: Icons.local_offer_outlined,
+                  activeIcon: Icons.local_offer,
+                  label: 'Schemes',
+                  index: 2,
+                  currentIndex: _currentIndex,
+                  onTap: () => _selectPage(2),
                 ),
               ],
             ),
@@ -735,7 +739,6 @@ class _HomePageState extends State<_HomePage> {
             _buildHero(context, userEmail),
             _buildSearch(),
             if (_selectedProduct != null) _buildComparePanel(),
-            const SizedBox(height: 6),
             _buildKpis(),
             _buildFeatureGrid(context),
             _buildSchemes(),
@@ -941,13 +944,24 @@ class _HomePageState extends State<_HomePage> {
                     color: Colors.white.withOpacity(.16),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(
-                    pincode,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_on_rounded,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        pincode,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -1486,18 +1500,26 @@ class _HomePageState extends State<_HomePage> {
     return NumberFormat('#,##,##0', 'en_IN').format(value);
   }
 
-  //  KPI section
+  String _formatMoney(dynamic raw) {
+    final value = double.tryParse(raw.toString()) ?? 0.0;
+    return NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 2,
+    ).format(value);
+  }
+
   Widget _buildKpis() {
     final monthLabel = _monthYearLabel(DateTime.now());
     final data = _kpiData;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'This month — $monthLabel',
+            'This month - $monthLabel',
             style: const TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 13,
@@ -1505,24 +1527,29 @@ class _HomePageState extends State<_HomePage> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
+
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
-              Expanded(
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 16 - 16 - 10) / 2,
                 child: _KpiCard(
                   label: 'Pending orders',
-                  value: _loadingKpis ? '—' : '${data?.pendingCount ?? 0}',
+                  value: _loadingKpis ? '-' : '${data?.pendingCount ?? 0}',
                   sub: _loadingKpis
                       ? 'Loading…'
                       : 'Worth ₹${_formatAmount(data?.pendingAmount ?? 0)}',
                   valueColor: kAmber,
+                  onTap: () => widget.onNavigateToPage(1),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
+              SizedBox(
+                width: (MediaQuery.of(context).size.width - 16 - 16 - 10) / 2,
                 child: _KpiCard(
                   label: 'Total purchase',
                   value: _loadingKpis
-                      ? '—'
+                      ? '-'
                       : '₹${_formatFullAmount(data?.totalPurchaseThisMonth ?? 0)}',
                   sub: _loadingKpis
                       ? 'Loading…'
@@ -1531,6 +1558,33 @@ class _HomePageState extends State<_HomePage> {
                             : '${data!.isGrowthPositive ? '▲' : '▼'} ${data.growthPercent!.abs().toStringAsFixed(0)}% vs last month'),
                   valueColor: kBlue,
                   subColor: (data?.growthPercent ?? 0) >= 0 ? kGreen : kAmber,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const PharmaPurchaseHistoryPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              SizedBox(
+                width: MediaQuery.of(context).size.width - 16 - 16,
+                child: _KpiCard(
+                  label: 'Cashback',
+                  value: _loadingKpis
+                      ? '-'
+                      : _formatMoney(
+                          (data?.totalPurchaseThisMonth ?? 0) * 0.01,
+                        ),
+                  sub: _loadingKpis
+                      ? 'Loading…'
+                      : (data?.growthPercent == null
+                            ? 'No data for last month'
+                            : 'Auto Credited to your wallet!'),
+                  valueColor: kGreen,
+                  subColor: mutedColor,
+                  onTap: () => widget.onNavigateToPage(3),
+                  isRectangular: true,
                 ),
               ),
             ],
@@ -1584,9 +1638,20 @@ class _HomePageState extends State<_HomePage> {
       _TileData(
         'Rewards',
         Icons.star_border_rounded,
-        badge: '₹240',
+        //badge: '₹240',
         badgeTeal: true,
         onTap: () => widget.onNavigateToPage(3),
+      ),
+      _TileData(
+        'Purchase History',
+        Icons.history_edu_outlined,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const PharmaPurchaseHistoryPage(),
+            ),
+          );
+        },
       ),
       _TileData(
         'Expiry & Batch',
@@ -1603,17 +1668,19 @@ class _HomePageState extends State<_HomePage> {
           context,
         ).push(MaterialPageRoute(builder: (_) => const DistributorsPage())),
       ),
-      /*
+
       _TileData(
         'Rx Subscription',
-        Icons.description_outlined,
+        Icons.calendar_month_outlined,
         onTap: () {
-          // later
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const RxSubscriptionPage()));
         },
       ),
-      */
+
       _TileData(
-        'Reports',
+        'Intelligence',
         Icons.bar_chart_outlined,
         onTap: () => widget.onNavigateToPage(5),
       ),
@@ -1625,7 +1692,7 @@ class _HomePageState extends State<_HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Everything you need',
+            'Quick Access',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 13,
@@ -1652,7 +1719,7 @@ class _HomePageState extends State<_HomePage> {
     final schemes = [
       _SchemeData(
         'Micro Labs · Manufacturer',
-        'Dolo 650 — Buy 10 strips, get 1 free',
+        'Dolo 650 - Buy 10 strips, get 1 free',
         'Valid till 15 Jul · Min. order 10 strips',
         kTeal,
       ),
@@ -1664,7 +1731,7 @@ class _HomePageState extends State<_HomePage> {
       ),
       _SchemeData(
         'GSK · Manufacturer',
-        'Augmentin 625 Duo — 5 + 1 scheme',
+        'Augmentin 625 Duo - 5 + 1 scheme',
         'Valid till 20 Jul · All distributors',
         kAmber,
       ),
@@ -1679,21 +1746,24 @@ class _HomePageState extends State<_HomePage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
+              children: [
                 Text(
-                  'Schemes in your area',
+                  'Active Schemes',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                     color: kInk,
                   ),
                 ),
-                Text(
-                  'View all',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: kTeal,
-                    fontWeight: FontWeight.w600,
+                GestureDetector(
+                  onTap: () => widget.onNavigateToPage(2),
+                  child: Text(
+                    'View all',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: kTeal,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -1809,12 +1879,15 @@ class _HomePageState extends State<_HomePage> {
                 ],
               ),
             ),
-            const Text(
-              'Review →',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: kAmber,
+            GestureDetector(
+              onTap: () => widget.onNavigateToPage(4),
+              child: const Text(
+                'Review →',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: kAmber,
+                ),
               ),
             ),
           ],
@@ -1847,6 +1920,9 @@ class _KpiCard extends StatelessWidget {
   final String sub;
   final Color valueColor;
   final Color? subColor;
+  final VoidCallback? onTap;
+  final String ctaText;
+  final bool isRectangular;
 
   const _KpiCard({
     required this.label,
@@ -1854,12 +1930,18 @@ class _KpiCard extends StatelessWidget {
     required this.sub,
     required this.valueColor,
     this.subColor,
+    this.onTap,
+    this.ctaText = 'View all →',
+    this.isRectangular = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: isRectangular ? 10 : 14,
+      ),
       decoration: BoxDecoration(
         color: kCard,
         borderRadius: BorderRadius.circular(16),
@@ -1871,37 +1953,132 @@ class _KpiCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: kMuted,
-              fontWeight: FontWeight.w500,
+      child: isRectangular
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: kMuted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              value,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 20,
+                                color: valueColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              sub,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: subColor ?? kMuted,
+                                fontWeight: subColor != null
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (onTap != null) ...[
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: onTap,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        ctaText,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: kBlue,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: kMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 22,
+                    color: valueColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  sub,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: subColor ?? kMuted,
+                    fontWeight: subColor != null
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                  ),
+                ),
+                if (onTap != null) ...[
+                  const SizedBox(height: 10),
+                  InkWell(
+                    onTap: onTap,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        ctaText,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: kBlue,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 22,
-              color: valueColor,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            sub,
-            style: TextStyle(
-              fontSize: 10.5,
-              color: subColor ?? kMuted,
-              fontWeight: subColor != null ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

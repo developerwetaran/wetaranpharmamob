@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wetaran_pharma/features/auth/presentation/pages/complete_profile_page.dart';
 import 'package:wetaran_pharma/features/orders/models/pharma_cart_provider.dart';
 import 'package:wetaran_pharma/features/orders/presentation/pages/add_order_screen.dart';
+import 'package:wetaran_pharma/features/purchase_history/purchase_history.dart';
+import 'package:wetaran_pharma/features/rx_subscription/presentation/pages/rx_subscription.dart';
 
 const kBlue = Color(0xFF0B4F8A);
 const kBlueDk = Color(0xFF083A66);
@@ -19,7 +22,7 @@ const kAmberSoft = Color(0xFFFFF4E0);
 const kRed = Color(0xFFC62828);
 const kRedSoft = Color(0xFFFDECEC);
 
-class AppDrawer extends StatelessWidget {
+class AppDrawer extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onSelectPage;
 
@@ -28,6 +31,28 @@ class AppDrawer extends StatelessWidget {
     required this.currentIndex,
     required this.onSelectPage,
   });
+
+  @override
+  State<AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends State<AppDrawer> {
+  String _appVersionText = 'Wetaran Pharma v1.0.0';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+
+    setState(() {
+      _appVersionText = 'Wetaran Pharma v${info.version}+${info.buildNumber}';
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,8 +77,8 @@ class AppDrawer extends StatelessWidget {
                       _DrawerItem(
                         icon: Icons.home_outlined,
                         title: 'Home',
-                        isActive: currentIndex == 0,
-                        onTap: () => onSelectPage(0),
+                        isActive: widget.currentIndex == 0,
+                        onTap: () => widget.onSelectPage(0),
                       ),
                       _DrawerItem(
                         icon: Icons.shopping_cart_outlined,
@@ -69,33 +94,57 @@ class AppDrawer extends StatelessWidget {
                       ),
                       _DrawerItem(
                         icon: Icons.receipt_long_outlined,
-                        title: 'My Orders',
-                        isActive: currentIndex == 1,
-                        onTap: () => onSelectPage(1),
+                        title: 'Ongoing Orders',
+                        isActive: widget.currentIndex == 1,
+                        onTap: () => widget.onSelectPage(1),
                       ),
                       _DrawerItem(
                         icon: Icons.local_offer_outlined,
                         title: 'Schemes',
-                        isActive: currentIndex == 2,
-                        onTap: () => onSelectPage(2),
+                        isActive: widget.currentIndex == 2,
+                        onTap: () => widget.onSelectPage(2),
                       ),
                       _DrawerItem(
                         icon: Icons.card_giftcard_rounded,
                         title: 'Rewards',
-                        isActive: currentIndex == 3,
-                        onTap: () => onSelectPage(3),
+                        isActive: widget.currentIndex == 3,
+                        onTap: () => widget.onSelectPage(3),
                       ),
                       _DrawerItem(
                         icon: Icons.lock_clock_outlined,
                         title: 'Expiry',
-                        isActive: currentIndex == 4,
-                        onTap: () => onSelectPage(4),
+                        isActive: widget.currentIndex == 4,
+                        onTap: () => widget.onSelectPage(4),
                       ),
                       _DrawerItem(
                         icon: Icons.bar_chart_outlined,
-                        title: 'Reports',
-                        isActive: currentIndex == 5,
-                        onTap: () => onSelectPage(5),
+                        title: 'Intelligence',
+                        isActive: widget.currentIndex == 5,
+                        onTap: () => widget.onSelectPage(5),
+                      ),
+                      _DrawerItem(
+                        icon: Icons.calendar_month_outlined,
+                        title: 'Rx Subscription',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RxSubscriptionPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: Icons.history_edu_outlined,
+                        title: 'Purchase History',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const PharmaPurchaseHistoryPage(),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -170,15 +219,19 @@ class AppDrawer extends StatelessWidget {
                 color: Color(0xFFF9FBFD),
                 border: Border(top: BorderSide(color: kLine)),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.local_hospital_outlined, size: 13, color: kMuted),
-                  SizedBox(width: 6),
+                  const Icon(
+                    Icons.local_hospital_outlined,
+                    size: 13,
+                    color: kMuted,
+                  ),
+                  const SizedBox(width: 6),
                   Text(
-                    'Wetaran Pharma v1.0.0',
+                    _appVersionText,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 11,
                       color: kMuted,
                       fontWeight: FontWeight.w600,
@@ -206,10 +259,9 @@ class AppDrawer extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
+          SizedBox(
             width: 42,
             height: 42,
-            padding: const EdgeInsets.all(0),
             child: Image.asset(
               'assets/images/WRxLogo_RX.webp',
               fit: BoxFit.contain,

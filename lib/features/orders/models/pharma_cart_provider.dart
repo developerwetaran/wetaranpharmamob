@@ -272,6 +272,36 @@ class PharmaCartProvider extends ChangeNotifier {
     return true;
   }
 
+  void setVariantQty({
+    required String variantId,
+    required String unit,
+    required int qty,
+  }) {
+    final index = _items.indexWhere(
+      (item) => item.variantId == variantId && item.unit == unit,
+    );
+
+    if (index == -1) return;
+
+    if (qty <= 0) {
+      _items.removeAt(index);
+      notifyListeners();
+      return;
+    }
+
+    final oldItem = _items[index];
+
+    _items[index] = oldItem.copyWith(quantity: qty);
+    notifyListeners();
+  }
+
+  void removeVariant(String variantId, String unit) {
+    _items.removeWhere(
+      (item) => item.variantId == variantId && item.unit == unit,
+    );
+    notifyListeners();
+  }
+
   void updateQuantity(String variantId, String unit, int qty) {
     final idx = _items.indexWhere(
       (i) => i.variantId == variantId && i.unit == unit,

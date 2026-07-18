@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wetaran_pharma/features/distributors/presentation/pages/distributors_profile_page.dart';
-import 'package:wetaran_pharma/features/orders/services/pharma_distributor_service.dart';
+import 'package:wetaran_pharma/features/distributors/models/distributor_summary.dart';
 
 const ordersPrimaryBlue = Color.fromRGBO(0, 60, 190, 1);
 const headingColor = Color(0xFF0F172A);
@@ -56,15 +56,14 @@ class _DistributorsPageState extends State<DistributorsPage> {
     });
 
     try {
-      final authUser = supabase.auth.currentUser;
-      final authUserId = authUser?.id;
+      final authUserId = supabase.auth.currentUser?.id;
       if (authUserId == null) {
         throw Exception('No logged-in user found');
       }
 
       final pharmaProfile = await supabase
           .from('pharma_users')
-          .select('id')
+          .select('id, business_pincode')
           .eq('auth_user_id', authUserId)
           .maybeSingle();
 
@@ -73,17 +72,18 @@ class _DistributorsPageState extends State<DistributorsPage> {
       }
 
       final currentPharmaUserId = (pharmaProfile['id'] ?? '').toString();
+      final pincode = (pharmaProfile['business_pincode'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
       if (currentPharmaUserId.isEmpty) {
         throw Exception('Invalid pharma user id');
       }
 
-      final location = await PharmaDistributorService.loadPharmaUserLocation();
-      final pincode = (location['pincode'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-      final city = (location['city'] ?? '').toString().trim().toLowerCase();
-      final state = (location['state'] ?? '').toString().trim().toLowerCase();
+      if (pincode.isEmpty) {
+        throw Exception('Business pincode not found');
+      }
 
       final distributorRows = await supabase
           .from('distributor')
@@ -109,50 +109,26 @@ class _DistributorsPageState extends State<DistributorsPage> {
           .eq('is_active', true)
           .eq('is_available_on_pharma_marketplace', true);
 
-      bool matchesCoverage(Map<String, dynamic> coverage) {
+      bool matchesPincode(Map<String, dynamic> coverage) {
         final regions = (coverage['regions'] as List?) ?? [];
-        if (regions.isEmpty) return false;
 
-        int matchScore = 0;
+        for (final regionItem in regions) {
+          final region = Map<String, dynamic>.from(regionItem as Map);
+          final cities = (region['cities'] as List?) ?? [];
 
-        for (final item in regions) {
-          final region = Map<String, dynamic>.from(item as Map);
-
-          final regionState = (region['state'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
-          final citiesList = (region['cities'] as List?) ?? [];
-
-          if (state.isNotEmpty && regionState == state) {
-            matchScore = matchScore < 1 ? 1 : matchScore;
-          }
-
-          for (final cityItem in citiesList) {
+          for (final cityItem in cities) {
             final cityMap = Map<String, dynamic>.from(cityItem as Map);
-
-            final cityName = (cityMap['city'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
             final pincodes = (cityMap['pincodes'] as List? ?? [])
                 .map((e) => e.toString().trim().toLowerCase())
                 .toList();
 
-            if (city.isNotEmpty && cityName == city) {
-              matchScore = matchScore < 2 ? 2 : matchScore;
-            }
-
-            if (pincode.isNotEmpty && pincodes.contains(pincode)) {
-              matchScore = 3;
-              break;
+            if (pincodes.contains(pincode)) {
+              return true;
             }
           }
-
-          if (matchScore == 3) break;
         }
 
-        return matchScore > 0;
+        return false;
       }
 
       final Map<String, DistributorSummaryBuilder> grouped = {};
@@ -169,7 +145,7 @@ class _DistributorsPageState extends State<DistributorsPage> {
               )
             : <String, dynamic>{};
 
-        if (!matchesCoverage(coverage)) continue;
+        if (!matchesPincode(coverage)) continue;
 
         grouped[distributorId] = DistributorSummaryBuilder(
           id: distributorId,
@@ -378,11 +354,8 @@ class _DistributorsPageState extends State<DistributorsPage> {
   }
 
   Widget _buildSummaryStrip() {
-    final totalOrders = distributors.fold<int>(
-      0,
-      (sum, e) => sum + e.orderCount,
-    );
-    final totalValue = distributors.fold<double>(
+    final totalOrders = filtered.fold<int>(0, (sum, e) => sum + e.orderCount);
+    final totalValue = filtered.fold<double>(
       0,
       (sum, e) => sum + e.totalOrderedValue,
     );
@@ -721,123 +694,6 @@ class _DistributorsPageState extends State<DistributorsPage> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class DistributorSummary {
-  final String id;
-  final String companyName;
-  final String companyPhone;
-  final String companyEmail;
-  final String contactName;
-  final String contactPhone;
-  final String contactEmail;
-  final String gstin;
-  final String drugLicenseNo;
-  final String registeredOfficeAddress;
-  final String warehouseAddress;
-  final String partnerType;
-  final String status;
-  final bool isActive;
-  final int orderCount;
-  final double totalOrderedValue;
-  final int totalItems;
-  final Map<String, dynamic> serviceCoverage;
-
-  final String pharmaExpectedDelivery;
-  final String pharmaSameDayOrderCutoff;
-
-  DistributorSummary({
-    required this.id,
-    required this.companyName,
-    required this.companyPhone,
-    required this.companyEmail,
-    required this.contactName,
-    required this.contactPhone,
-    required this.contactEmail,
-    required this.gstin,
-    required this.drugLicenseNo,
-    required this.registeredOfficeAddress,
-    required this.warehouseAddress,
-    required this.partnerType,
-    required this.status,
-    required this.isActive,
-    required this.orderCount,
-    required this.totalOrderedValue,
-    required this.totalItems,
-    required this.serviceCoverage,
-    required this.pharmaExpectedDelivery,
-    required this.pharmaSameDayOrderCutoff,
-  });
-}
-
-class DistributorSummaryBuilder {
-  final String id;
-  final String companyName;
-  final String companyPhone;
-  final String companyEmail;
-  final String contactName;
-  final String contactPhone;
-  final String contactEmail;
-  final String gstin;
-  final String drugLicenseNo;
-  final String registeredOfficeAddress;
-  final String warehouseAddress;
-  final String partnerType;
-  final String status;
-  final bool isActive;
-  final Map<String, dynamic> serviceCoverage;
-
-  final String pharmaExpectedDelivery;
-  final String pharmaSameDayOrderCutoff;
-
-  int orderCount = 0;
-  double totalOrderedValue = 0;
-  int totalItems = 0;
-
-  DistributorSummaryBuilder({
-    required this.id,
-    required this.companyName,
-    required this.companyPhone,
-    required this.companyEmail,
-    required this.contactName,
-    required this.contactPhone,
-    required this.contactEmail,
-    required this.gstin,
-    required this.drugLicenseNo,
-    required this.registeredOfficeAddress,
-    required this.warehouseAddress,
-    required this.partnerType,
-    required this.status,
-    required this.isActive,
-    required this.serviceCoverage,
-    required this.pharmaExpectedDelivery,
-    required this.pharmaSameDayOrderCutoff,
-  });
-
-  DistributorSummary build() {
-    return DistributorSummary(
-      id: id,
-      companyName: companyName,
-      companyPhone: companyPhone,
-      companyEmail: companyEmail,
-      contactName: contactName,
-      contactPhone: contactPhone,
-      contactEmail: contactEmail,
-      gstin: gstin,
-      drugLicenseNo: drugLicenseNo,
-      registeredOfficeAddress: registeredOfficeAddress,
-      warehouseAddress: warehouseAddress,
-      partnerType: partnerType,
-      status: status,
-      isActive: isActive,
-      orderCount: orderCount,
-      totalOrderedValue: totalOrderedValue,
-      totalItems: totalItems,
-      serviceCoverage: serviceCoverage,
-      pharmaExpectedDelivery: pharmaExpectedDelivery,
-      pharmaSameDayOrderCutoff: pharmaSameDayOrderCutoff,
     );
   }
 }

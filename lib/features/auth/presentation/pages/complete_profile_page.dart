@@ -42,6 +42,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   final _drugLicenseNumberController = TextEditingController();
   final _contactPersonNameController = TextEditingController();
   final _gstNumberController = TextEditingController();
+  final _areaController = TextEditingController();
   final _businessCityController = TextEditingController();
   final _businessStateController = TextEditingController();
   final _businessPincodeController = TextEditingController();
@@ -111,6 +112,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     _businessCityController.dispose();
     _businessStateController.dispose();
     _businessPincodeController.dispose();
+    _areaController.dispose();
     super.dispose();
   }
 
@@ -204,27 +206,47 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
       final errorMessage = data['error_message']?.toString();
 
       if (status == 'OK' && results.isNotEmpty) {
-        final formattedAddress = (results.first['formatted_address'] ?? '')
+        final firstResult = results.first as Map<String, dynamic>;
+        final formattedAddress = (firstResult['formatted_address'] ?? '')
             .toString()
             .trim();
+
+        final components =
+            (firstResult['address_components'] as List?) ?? const [];
+
+        final area =
+            _getAddressComponent(components, ['sublocality_level_1']) ??
+            _getAddressComponent(components, ['sublocality']) ??
+            _getAddressComponent(components, ['neighborhood']) ??
+            _getAddressComponent(components, ['administrative_area_level_2']);
+
+        final city =
+            _getAddressComponent(components, ['locality']) ??
+            _getAddressComponent(components, ['administrative_area_level_3']) ??
+            _getAddressComponent(components, ['administrative_area_level_2']);
+
+        final stateRaw = _getAddressComponent(components, [
+          'administrative_area_level_1',
+        ]);
+
+        final normalizedState = _normalizeIndianState(stateRaw);
+
+        final pincode = _getAddressComponent(components, ['postal_code']);
 
         if (formattedAddress.isEmpty) {
           throw Exception('Formatted address is empty');
         }
-
+        final resolvedArea = (area != null && area != city) ? area : '';
         setState(() {
           _geoLatitude = lat;
           _geoLongitude = lng;
           _geoFormattedAddress = formattedAddress;
           _businessAddressController.text = formattedAddress;
+          _areaController.text = resolvedArea;
+          _businessCityController.text = city ?? '';
+          _businessPincodeController.text = pincode ?? '';
+          _businessStateController.text = normalizedState ?? '';
         });
-      } else if (status == 'ZERO_RESULTS') {
-        setState(() {
-          _geoLatitude = lat;
-          _geoLongitude = lng;
-          _geoFormattedAddress = null;
-        });
-        _showError('Location captured, but no readable address was returned');
       } else {
         throw Exception(
           'Reverse geocoding failed. status=$status error=${errorMessage ?? "none"}',
@@ -237,6 +259,80 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
         setState(() => _isAddressLoading = false);
       }
     }
+  }
+
+  String? _getAddressComponent(
+    List<dynamic> components,
+    List<String> targetTypes, {
+    bool useShortName = false,
+  }) {
+    for (final component in components) {
+      final types = List<String>.from(component['types'] ?? const []);
+      final matches = targetTypes.any(types.contains);
+      if (matches) {
+        return (useShortName ? component['short_name'] : component['long_name'])
+            ?.toString()
+            .trim();
+      }
+    }
+    return null;
+  }
+
+  String? _normalizeIndianState(String? raw) {
+    if (raw == null) return null;
+
+    final value = raw.trim().toLowerCase();
+
+    const map = {
+      'andhra pradesh': 'Andhra Pradesh',
+      'arunachal pradesh': 'Arunachal Pradesh',
+      'assam': 'Assam',
+      'bihar': 'Bihar',
+      'chhattisgarh': 'Chhattisgarh',
+      'goa': 'Goa',
+      'gujarat': 'Gujarat',
+      'haryana': 'Haryana',
+      'himachal pradesh': 'Himachal Pradesh',
+      'jharkhand': 'Jharkhand',
+      'karnataka': 'Karnataka',
+      'kerala': 'Kerala',
+      'madhya pradesh': 'Madhya Pradesh',
+      'maharashtra': 'Maharashtra',
+      'manipur': 'Manipur',
+      'meghalaya': 'Meghalaya',
+      'mizoram': 'Mizoram',
+      'nagaland': 'Nagaland',
+      'odisha': 'Odisha',
+      'orissa': 'Odisha',
+      'punjab': 'Punjab',
+      'rajasthan': 'Rajasthan',
+      'sikkim': 'Sikkim',
+      'tamil nadu': 'Tamil Nadu',
+      'telangana': 'Telangana',
+      'tripura': 'Tripura',
+      'uttar pradesh': 'Uttar Pradesh',
+      'uttarakhand': 'Uttarakhand',
+      'uttaranchal': 'Uttarakhand',
+      'west bengal': 'West Bengal',
+      'andaman and nicobar islands': 'Andaman & Nicobar Islands',
+      'andaman & nicobar islands': 'Andaman & Nicobar Islands',
+      'chandigarh': 'Chandigarh',
+      'dadra and nagar haveli and daman and diu':
+          'Dadra & Nagar Haveli and Daman & Diu',
+      'dadra & nagar haveli and daman & diu':
+          'Dadra & Nagar Haveli and Daman & Diu',
+      'delhi': 'Delhi',
+      'nct of delhi': 'Delhi',
+      'national capital territory of delhi': 'Delhi',
+      'jammu and kashmir': 'Jammu & Kashmir',
+      'jammu & kashmir': 'Jammu & Kashmir',
+      'ladakh': 'Ladakh',
+      'lakshadweep': 'Lakshadweep',
+      'puducherry': 'Puducherry',
+      'pondicherry': 'Puducherry',
+    };
+
+    return map[value];
   }
 
   Future<void> _loadProfile() async {
@@ -264,6 +360,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
         _contactPersonNameController.text = (row['contact_person_name'] ?? '')
             .toString();
         _gstNumberController.text = (row['gst_number'] ?? '').toString();
+        _areaController.text = (row['area'] ?? '').toString();
         _businessCityController.text = (row['business_city'] ?? '').toString();
         _businessStateController.text = (row['business_state'] ?? '')
             .toString();
@@ -954,6 +1051,11 @@ Client acceptance timestamp (IST): $acceptedAtText
 
   @override
   Widget build(BuildContext context) {
+    final selectedState =
+        _indianStatesAndUts.contains(_businessStateController.text.trim())
+        ? _businessStateController.text.trim()
+        : null;
+
     return PopScope(
       canPop: widget.allowBack,
       onPopInvokedWithResult: (didPop, result) {
@@ -1145,6 +1247,7 @@ Client acceptance timestamp (IST): $acceptedAtText
               const SizedBox(height: 16),
 
               const _FieldLabel('ADDRESS LINE', requiredField: true),
+
               const SizedBox(height: 7),
               _InputShell(
                 child: TextFormField(
@@ -1178,9 +1281,35 @@ Client acceptance timestamp (IST): $acceptedAtText
                 ),
               ),
               const SizedBox(height: 16),
+              const _FieldLabel('AREA', requiredField: false),
+              const SizedBox(height: 7),
+
+              _InputShell(
+                child: TextFormField(
+                  controller: _areaController,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: ink,
+                  ),
+                  decoration: _inputDecoration(
+                    hintText: 'Area',
+                    prefixIcon: Icons.area_chart_outlined,
+                  ),
+                  validator: (value) {
+                    if ((value ?? '').trim().isEmpty) {
+                      return 'Please enter area';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: 7),
 
               const _FieldLabel('CITY', requiredField: true),
+
               const SizedBox(height: 7),
+
               _InputShell(
                 child: TextFormField(
                   controller: _businessCityController,
@@ -1205,12 +1334,11 @@ Client acceptance timestamp (IST): $acceptedAtText
               const SizedBox(height: 16),
 
               const _FieldLabel('STATE / UNION TERRITORY', requiredField: true),
+
               const SizedBox(height: 7),
               _InputShell(
                 child: DropdownButtonFormField<String>(
-                  value: _businessStateController.text.trim().isEmpty
-                      ? null
-                      : _businessStateController.text.trim(),
+                  value: selectedState,
                   isExpanded: true,
                   icon: const Icon(Icons.expand_more_rounded, color: inkFaint),
                   style: const TextStyle(
@@ -1222,14 +1350,12 @@ Client acceptance timestamp (IST): $acceptedAtText
                     hintText: 'Select state / UT',
                     prefixIcon: Icons.map_outlined,
                   ),
-                  items: _indianStatesAndUts
-                      .map(
-                        (state) => DropdownMenuItem<String>(
-                          value: state,
-                          child: Text(state),
-                        ),
-                      )
-                      .toList(),
+                  items: _indianStatesAndUts.map((state) {
+                    return DropdownMenuItem<String>(
+                      value: state,
+                      child: Text(state),
+                    );
+                  }).toList(),
                   onChanged: (value) {
                     setState(() {
                       _businessStateController.text = value ?? '';
@@ -1475,7 +1601,7 @@ Client acceptance timestamp (IST): $acceptedAtText
                               _clientAgreementAcceptedAt,
                               _clientAgreementVersion,
                             )
-                          : 'Not accepted yet — required to enable medicine orders',
+                          : 'Not accepted yet - required to enable medicine orders',
                       style: TextStyle(
                         fontSize: 12.4,
                         fontWeight: FontWeight.w700,
@@ -1684,7 +1810,7 @@ class _LockedValueRow extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 15),
             child: Text(
-              value.isEmpty ? '—' : value,
+              value.isEmpty ? '-' : value,
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,

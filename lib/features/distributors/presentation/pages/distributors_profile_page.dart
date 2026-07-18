@@ -1,8 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:wetaran_pharma/features/distributors/models/distributor_summary.dart';
 
-import 'distributors_page.dart';
+const ordersPrimaryBlue = Color.fromRGBO(0, 60, 190, 1);
+const headingColor = Color(0xFF0F172A);
+const mutedColor = Color(0xFF64748B);
+const borderColor = Color(0xFFE2E8F0);
+const pageBg = Color(0xFFF8FAFC);
+const greenSoft = Color(0xFFDCFCE7);
+const green = Color(0xFF16A34A);
+const amberSoft = Color(0xFFFFEDD5);
+const amber = Color(0xFFD97706);
+const redSoft = Color(0xFFFEE2E2);
+const red = Color(0xFFDC2626);
+const kBlue = Color(0xFF0B4F8A);
+const kBlueDk = Color(0xFF083A66);
+const Color kLine = Color(0xFFE3EBF1);
+const Color kInk = Color(0xFF13242F);
+const tealSoft = Color(0xFFCCFBF1);
+const teal = Color(0xFF0F766E);
+const blueSoft = Color(0xFFDBEAFE);
+const blue = Color(0xFF2563EB);
+const purpleSoft = Color(0xFFF3E8FF);
+const purple = Color(0xFF7C3AED);
+const graySoft = Color(0xFFF1F5F9);
+const gray = Color(0xFF64748B);
+const bookedSoft = Color(0xFFE0F2FE);
+const booked = Color(0xFF0284C7);
+
+const deliveredSoft = Color(0xFFDCFCE7);
+const delivered = Color(0xFF16A34A);
+
+const newSoft = Color(0xFFF3E8FF);
+const newColor = Color(0xFF7C3AED);
+
+const pendingSoft = Color(0xFFFFF7CC);
+const pending = Color(0xFFCA8A04);
+
+const processingSoft = Color(0xFFFFEDD5);
+const processing = Color(0xFFEA580C);
+
+const cancelledSoft = Color(0xFFFEE2E2);
+const cancelled = Color(0xFFDC2626);
+const returnedSoft = Color(0xFFE0E7FF);
+const returned = Color(0xFF4F46E5);
 
 class DistributorProfilePage extends StatefulWidget {
   final DistributorSummary distributor;
@@ -182,14 +224,26 @@ class _DistributorProfilePageState extends State<DistributorProfilePage> {
   Color _statusBg(String status) {
     switch (status.toLowerCase()) {
       case 'booked':
+        return bookedSoft;
+
       case 'delivered':
-        return greenSoft;
-      case 'new':
+        return deliveredSoft;
+
+      case 'approved':
+        return newSoft;
+
       case 'pending':
-      case 'processing':
-        return amberSoft;
+        return pendingSoft;
+
+      case 'onhold':
+        return processingSoft;
+
+      case 'returned':
+        return returnedSoft;
+
       case 'cancelled':
-        return redSoft;
+        return cancelledSoft;
+
       default:
         return const Color(0xFFE8F0FF);
     }
@@ -198,14 +252,26 @@ class _DistributorProfilePageState extends State<DistributorProfilePage> {
   Color _statusFg(String status) {
     switch (status.toLowerCase()) {
       case 'booked':
+        return booked;
+
       case 'delivered':
-        return green;
-      case 'new':
+        return delivered;
+
+      case 'approved':
+        return newColor;
+
       case 'pending':
-      case 'processing':
-        return amber;
+        return pending;
+
+      case 'onhold':
+        return processing;
+
+      case 'returned':
+        return returned;
+
       case 'cancelled':
-        return red;
+        return cancelled;
+
       default:
         return ordersPrimaryBlue;
     }
@@ -574,7 +640,7 @@ class _DistributorProfilePageState extends State<DistributorProfilePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Serviced Area — Postal Codes',
+            'Serviced Area - Postal Codes',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
@@ -625,7 +691,7 @@ class _DistributorProfilePageState extends State<DistributorProfilePage> {
     final cutoffText = cutoff.trim();
 
     if (cutoffText.isEmpty) return mode;
-    return '$mode · order before $cutoffText';
+    return '$mode · Order before $cutoffText';
   }
 
   Widget _deliveryChip() {
@@ -741,14 +807,14 @@ class _DistributorProfilePageState extends State<DistributorProfilePage> {
           _infoTile('Warehouse', widget.distributor.warehouseAddress),
           const SizedBox(height: 16),
           _deliveryChip(),
-
           const SizedBox(height: 16),
-
+          /*
           _infoTile(
             'Order before',
             widget.distributor.pharmaSameDayOrderCutoff,
           ),
-          const SizedBox(height: 16),
+          */
+          //const SizedBox(height: 16),
           _buildServiceAreaCard(),
           const SizedBox(height: 16),
           const Text(

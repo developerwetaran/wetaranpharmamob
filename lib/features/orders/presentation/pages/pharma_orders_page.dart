@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:wetaran_pharma/core/widgets/reusable_pharma_header.dart';
+import 'package:wetaran_pharma/features/distributors/models/distributor_summary.dart';
+import 'package:wetaran_pharma/features/distributors/presentation/pages/distributors_profile_page.dart';
 import 'package:wetaran_pharma/features/orders/models/pharma_cart_provider.dart';
 import 'package:wetaran_pharma/features/orders/presentation/pages/add_order_screen.dart';
 import 'package:wetaran_pharma/features/orders/presentation/widgets/pharma_cart_sheet.dart';
@@ -20,6 +22,35 @@ const redSoft = Color(0xFFFEE2E2);
 const red = Color(0xFFDC2626);
 const kBlue = Color(0xFF0B4F8A);
 const kBlueDk = Color(0xFF083A66);
+const Color kLine = Color(0xFFE3EBF1);
+const Color kInk = Color(0xFF13242F);
+const tealSoft = Color(0xFFCCFBF1);
+const teal = Color(0xFF0F766E);
+const blueSoft = Color(0xFFDBEAFE);
+const blue = Color(0xFF2563EB);
+const purpleSoft = Color(0xFFF3E8FF);
+const purple = Color(0xFF7C3AED);
+const graySoft = Color(0xFFF1F5F9);
+const gray = Color(0xFF64748B);
+const bookedSoft = Color(0xFFE0F2FE);
+const booked = Color(0xFF0284C7);
+
+const deliveredSoft = Color(0xFFDCFCE7);
+const delivered = Color(0xFF16A34A);
+
+const newSoft = Color(0xFFF3E8FF);
+const newColor = Color(0xFF7C3AED);
+
+const pendingSoft = Color(0xFFFFF7CC);
+const pending = Color(0xFFCA8A04);
+
+const processingSoft = Color(0xFFFFEDD5);
+const processing = Color(0xFFEA580C);
+
+const cancelledSoft = Color(0xFFFEE2E2);
+const cancelled = Color(0xFFDC2626);
+const returnedSoft = Color(0xFFE0E7FF);
+const returned = Color(0xFF4F46E5);
 
 class PharmaOrdersPage extends StatefulWidget {
   final VoidCallback onOpenDrawer;
@@ -34,7 +65,7 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
     with AutomaticKeepAliveClientMixin {
   final SupabaseClient _supabase = Supabase.instance.client;
   final TextEditingController _searchCtrl = TextEditingController();
-
+  String _statusFilter = 'All';
   bool _loading = true;
   String? _error;
   // ignore: unused_field
@@ -91,22 +122,27 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
       final rows = await _supabase
           .from('orders')
           .select('''
-            *,
-            distributor:distributor_id (
-              id,
-              company_name,
-              company_phone,
-              company_email,
-              contact_name,
-              contact_phone,
-              contact_email,
-              registered_office_address,
-              warehouse_address,
-              partner_type,
-              status,
-              is_active
-            )
-          ''')
+      *,
+      distributor:distributor_id (
+        id,
+        company_name,
+        company_phone,
+        company_email,
+        contact_name,
+        contact_phone,
+        contact_email,
+        gstin,
+        drug_license_no,
+        registered_office_address,
+        warehouse_address,
+        partner_type,
+        status,
+        is_active,
+        service_coverage,
+        pharma_expected_delivery,
+        pharma_same_day_order_cutoff
+      )
+    ''')
           .eq('pharma_user_id', pharmaUserId)
           .order('order_date', ascending: false);
 
@@ -131,13 +167,29 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
   void _applyFilter() {
     final q = _searchCtrl.text.trim().toLowerCase();
 
-    setState(() {
-      if (q.isEmpty) {
-        _filtered = List<Map<String, dynamic>>.from(_orders);
-        return;
-      }
+    List<Map<String, dynamic>> result = List<Map<String, dynamic>>.from(
+      _orders,
+    );
 
-      _filtered = _orders.where((order) {
+    if (_statusFilter == 'Cancelled') {
+      result = result.where((order) {
+        final status = (order['status'] ?? '').toString().trim().toLowerCase();
+        return status == 'cancelled' || status == 'canceled';
+      }).toList();
+    } else if (_statusFilter == 'On Hold') {
+      result = result.where((order) {
+        final status = (order['status'] ?? '').toString().trim().toLowerCase();
+        return status == 'on hold' || status == 'hold';
+      }).toList();
+    } else if (_statusFilter == 'Returned') {
+      result = result.where((order) {
+        final status = (order['status'] ?? '').toString().trim().toLowerCase();
+        return status == 'returned' || status == 'return';
+      }).toList();
+    }
+
+    if (q.isNotEmpty) {
+      result = result.where((order) {
         final orderId = (order['order_id'] ?? '').toString().toLowerCase();
         final phone = (order['phone_number'] ?? '').toString().toLowerCase();
         final status = (order['status'] ?? '').toString().toLowerCase();
@@ -162,15 +214,11 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
             address.contains(q) ||
             hasProductMatch;
       }).toList();
-    });
-  }
+    }
 
-  List<Map<String, dynamic>> _readProducts(Map<String, dynamic> order) {
-    final raw = order['products'] as List? ?? [];
-    return raw
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    setState(() {
+      _filtered = result;
+    });
   }
 
   String _productName(Map<String, dynamic> p) {
@@ -190,15 +238,6 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
   double _productTotal(Map<String, dynamic> p) {
     final v = p['total_price'] ?? p['line_total'] ?? p['order_price'];
     return (v as num?)?.toDouble() ?? 0.0;
-  }
-
-  String _productMeta(Map<String, dynamic> p) {
-    final parts = [
-      (p['sku_code'] ?? '').toString(),
-      (p['brand_name'] ?? '').toString(),
-      (p['unit'] ?? p['primary_unit'] ?? '').toString(),
-    ].where((e) => e.trim().isNotEmpty).toList();
-    return parts.join(' · ');
   }
 
   int _productCount(Map<String, dynamic> order) {
@@ -221,8 +260,12 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
   }
 
   String _formatMoney(dynamic raw) {
-    final value = (raw as num?)?.toDouble() ?? 0;
-    return '₹${value.toStringAsFixed(0)}';
+    final value = double.tryParse(raw.toString()) ?? 0.0;
+    return NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 2,
+    ).format(value);
   }
 
   String _formatMoneyPrecise(num? raw) {
@@ -233,14 +276,26 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
   Color _statusBg(String status) {
     switch (status.toLowerCase()) {
       case 'booked':
+        return bookedSoft;
+
       case 'delivered':
-        return greenSoft;
-      case 'new':
+        return deliveredSoft;
+
+      case 'approved':
+        return newSoft;
+
       case 'pending':
-      case 'processing':
-        return amberSoft;
+        return pendingSoft;
+
+      case 'onhold':
+        return processingSoft;
+
+      case 'returned':
+        return returnedSoft;
+
       case 'cancelled':
-        return redSoft;
+        return cancelledSoft;
+
       default:
         return const Color(0xFFE8F0FF);
     }
@@ -249,14 +304,26 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
   Color _statusFg(String status) {
     switch (status.toLowerCase()) {
       case 'booked':
+        return booked;
+
       case 'delivered':
-        return green;
-      case 'new':
+        return delivered;
+
+      case 'approved':
+        return newColor;
+
       case 'pending':
-      case 'processing':
-        return amber;
+        return pending;
+
+      case 'onhold':
+        return processing;
+
+      case 'returned':
+        return returned;
+
       case 'cancelled':
-        return red;
+        return cancelled;
+
       default:
         return ordersPrimaryBlue;
     }
@@ -268,15 +335,146 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
     return s[0].toUpperCase() + s.substring(1).toLowerCase();
   }
 
+  String _deliveryLabel(Map<String, dynamic> order) {
+    final status = (order['status'] ?? '').toString().trim().toLowerCase();
+
+    switch (status) {
+      case 'delivered':
+        return 'Delivered';
+
+      case 'cancelled':
+        return 'Status';
+
+      case 'returned':
+        return 'Status';
+
+      default:
+        return 'Expected delivery';
+    }
+  }
+
   String _expectedDeliveryText(Map<String, dynamic> order) {
-    final raw =
-        order['expected_delivery'] ??
-        order['delivery_date'] ??
-        order['expected_delivery_date'];
-    if (raw == null) return 'Not available';
-    final dt = DateTime.tryParse(raw.toString());
-    if (dt == null) return raw.toString();
-    return DateFormat('dd MMM yyyy, hh:mm a').format(dt.toLocal());
+    final status = (order['status'] ?? '').toString().trim().toLowerCase();
+
+    switch (status) {
+      case 'cancelled':
+        return 'Cancelled';
+
+      case 'returned':
+        return 'Returned';
+
+      case 'delivered':
+        final deliveredDate = _calculatedDeliveryDate(order);
+        if (deliveredDate == null) return 'Delivered';
+        return 'Delivered on ${DateFormat('dd MMM yyyy').format(deliveredDate)}';
+
+      default:
+        final deliveryDate = _calculatedDeliveryDate(order);
+        if (deliveryDate == null) return 'Not available';
+
+        final orderDateRaw =
+            order['order_date'] ?? order['created_at'] ?? order['ordered_at'];
+
+        final orderDate = DateTime.tryParse(orderDateRaw.toString())?.toLocal();
+        if (orderDate == null) {
+          return DateFormat('dd MMM yyyy').format(deliveryDate);
+        }
+
+        final isSameCalendarDay =
+            deliveryDate.year == orderDate.year &&
+            deliveryDate.month == orderDate.month &&
+            deliveryDate.day == orderDate.day;
+
+        final formattedDate = DateFormat('dd MMM yyyy').format(deliveryDate);
+
+        return isSameCalendarDay
+            ? 'Same day • $formattedDate'
+            : 'Tomorrow • $formattedDate';
+    }
+  }
+
+  DateTime? _calculatedDeliveryDate(Map<String, dynamic> order) {
+    final distributor = order['distributor'] as Map<String, dynamic>?;
+    final deliveryType =
+        (distributor?['pharma_expected_delivery'] ?? 'same_day')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+    final cutoffRaw = distributor?['pharma_same_day_order_cutoff']?.toString();
+
+    final orderDateRaw =
+        order['order_date'] ?? order['created_at'] ?? order['ordered_at'];
+
+    if (orderDateRaw == null) return null;
+
+    final orderDate = DateTime.tryParse(orderDateRaw.toString())?.toLocal();
+    if (orderDate == null) return null;
+
+    if (deliveryType != 'same_day') {
+      return DateTime(orderDate.year, orderDate.month, orderDate.day);
+    }
+
+    if (cutoffRaw == null || cutoffRaw.trim().isEmpty) {
+      return DateTime(orderDate.year, orderDate.month, orderDate.day);
+    }
+
+    final cutoff = _parseCutoffTime(cutoffRaw);
+    if (cutoff == null) {
+      return DateTime(orderDate.year, orderDate.month, orderDate.day);
+    }
+
+    final cutoffDateTime = DateTime(
+      orderDate.year,
+      orderDate.month,
+      orderDate.day,
+      cutoff.hour,
+      cutoff.minute,
+    );
+
+    final isSameDay =
+        orderDate.isBefore(cutoffDateTime) ||
+        orderDate.isAtSameMomentAs(cutoffDateTime);
+
+    return isSameDay
+        ? DateTime(orderDate.year, orderDate.month, orderDate.day)
+        : DateTime(
+            orderDate.year,
+            orderDate.month,
+            orderDate.day,
+          ).add(const Duration(days: 1));
+  }
+
+  DateTime? _parseCutoffTime(String raw) {
+    final value = raw.trim();
+
+    final formats = [
+      DateFormat('HH:mm'),
+      DateFormat('H:mm'),
+      DateFormat('hh:mm a'),
+      DateFormat('h:mm a'),
+    ];
+
+    for (final format in formats) {
+      try {
+        return format.parse(value);
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  bool _shouldShowDeliveryRow(Map<String, dynamic> order) {
+    final status = (order['status'] ?? '').toString().trim().toLowerCase();
+
+    switch (status) {
+      case 'delivered':
+      case 'cancelled':
+      case 'returned':
+        return false;
+      default:
+        return true;
+    }
   }
 
   Widget _buildSearchBar() {
@@ -312,6 +510,43 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildStatusFilters() {
+    final filters = ['All', 'Cancelled', 'On Hold', 'Returned'];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: filters.map((filter) {
+        final isSelected = _statusFilter == filter;
+
+        return ChoiceChip(
+          showCheckmark: false,
+          label: Text(filter),
+          selected: isSelected,
+          onSelected: (_) {
+            setState(() {
+              _statusFilter = filter;
+            });
+            _applyFilter();
+          },
+          labelStyle: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : kInk,
+          ),
+          selectedColor: kBlue,
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: isSelected ? kBlue : kLine),
+          ),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+        );
+      }).toList(),
     );
   }
 
@@ -442,7 +677,7 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
 
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final status = (order['status'] ?? 'new').toString();
-    final orderId = (order['order_id'] ?? '—').toString();
+    final orderId = (order['order_id'] ?? '-').toString();
     final distributor = (order['distributor'] as Map<String, dynamic>?) ?? {};
 
     final distributorName =
@@ -617,7 +852,7 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
     return Column(
       children: [
         PharmaPageHeader(
-          title: 'Orders Page',
+          title: 'Ongoing Orders',
           showMenu: true,
           showNotification: false,
           showCart: true,
@@ -626,7 +861,8 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
           onCart: () => showPharmaCartSheet(context),
         ),
         _buildSearchBar(),
-        //_buildSummaryBlock(),
+        _buildStatusFilters(),
+        const SizedBox(height: 10),
         Expanded(
           child: Container(
             color: pageBg,
@@ -651,6 +887,183 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
       backgroundColor: pageBg,
       floatingActionButton: _buildPlaceOrderFab(),
       body: SafeArea(bottom: false, child: _buildContent(cart)),
+    );
+  }
+
+  Widget _kvDistributorRow({
+    required Map<String, dynamic> distributor,
+    required String distributorName,
+    required VoidCallback onTap,
+  }) {
+    final products = (distributor['products'] as List? ?? []);
+    final productCount = products.length;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
+        child: Column(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: onTap,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFF6FAFF), Color(0xFFF9FCFF)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFDCE8F5)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEAF2FF),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.storefront_rounded,
+                              size: 18,
+                              color: kBlue,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  distributorName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12.8,
+                                    fontWeight: FontWeight.w800,
+                                    color: kBlue,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  (distributor['company_phone'] ?? '-')
+                                      .toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11.6,
+                                    color: mutedColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEAF8EE),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        distributor['partner_type']
+                                                    ?.toString()
+                                                    .trim()
+                                                    .isNotEmpty ==
+                                                true
+                                            ? distributor['partner_type']
+                                                  .toString()
+                                            : 'Distributor',
+                                        style: const TextStyle(
+                                          fontSize: 10.6,
+                                          color: green,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2),
+                            child: Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: kBlue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openDistributorProfile(Map<String, dynamic> distributor) {
+    final d = DistributorSummary(
+      id: (distributor['id'] ?? '').toString(),
+      companyName: (distributor['company_name'] ?? '').toString(),
+      companyPhone: (distributor['company_phone'] ?? '').toString(),
+      companyEmail: (distributor['company_email'] ?? '').toString(),
+      contactName: (distributor['contact_name'] ?? '').toString(),
+      contactPhone: (distributor['contact_phone'] ?? '').toString(),
+      contactEmail: (distributor['contact_email'] ?? '').toString(),
+      gstin: (distributor['gstin'] ?? '').toString(),
+      drugLicenseNo: (distributor['drug_license_no'] ?? '').toString(),
+      registeredOfficeAddress: (distributor['registered_office_address'] ?? '')
+          .toString(),
+      warehouseAddress: (distributor['warehouse_address'] ?? '').toString(),
+      partnerType: (distributor['partner_type'] ?? '').toString(),
+      status: (distributor['status'] ?? '').toString(),
+      isActive: distributor['is_active'] == true,
+      orderCount: 0,
+      totalOrderedValue: 0,
+      totalItems: 0,
+      serviceCoverage: distributor['service_coverage'] is Map
+          ? Map<String, dynamic>.from(distributor['service_coverage'] as Map)
+          : <String, dynamic>{},
+      pharmaExpectedDelivery: (distributor['pharma_expected_delivery'] ?? '')
+          .toString(),
+      pharmaSameDayOrderCutoff:
+          (distributor['pharma_same_day_order_cutoff'] ?? '').toString(),
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DistributorProfilePage(
+          distributor: d,
+          pharmaUserId: _pharmaUserId ?? '',
+        ),
+      ),
     );
   }
 
@@ -748,17 +1161,25 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
                       children: [
-                        _kvRow('Distributor', distributorName),
+                        _kvDistributorRow(
+                          distributor: distributor,
+                          distributorName: distributorName,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _openDistributorProfile(distributor);
+                          },
+                        ),
                         _kvRow('Company Phone', distributorPhone),
                         _kvRow('Company Email', distributorEmail),
                         _kvStatusRow('Status', status),
-                        _kvRow(
-                          'Expected delivery',
-                          _expectedDeliveryText(order),
-                        ),
+                        if (_shouldShowDeliveryRow(order))
+                          _kvRow(
+                            'Expected delivery',
+                            _expectedDeliveryText(order),
+                          ),
                         const SizedBox(height: 14),
                         Text(
-                          'Items — ${products.length} products · ${_totalQty(order)} units',
+                          'Items - ${products.length} products · ${_totalQty(order)} units',
                           style: const TextStyle(
                             fontSize: 12,
                             color: mutedColor,
@@ -773,7 +1194,17 @@ class _PharmaOrdersPageState extends State<PharmaOrdersPage>
                           _formatMoney(order['total_amount']),
                           valueBlue: true,
                         ),
-                        _kvRow('Cashback', 'Not available'),
+                        _kvRow(
+                          'Cashback',
+                          _formatMoney(
+                            (double.tryParse(
+                                      order['total_amount'].toString(),
+                                    ) ??
+                                    0.0) *
+                                0.01,
+                          ),
+                          valueGreen: true,
+                        ),
                         if ((order['notes'] ?? '').toString().trim().isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 10),

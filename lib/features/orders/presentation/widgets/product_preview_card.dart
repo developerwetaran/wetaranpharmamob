@@ -691,17 +691,17 @@ class _ProductPreviewCardState extends State<ProductPreviewCard>
               _pchip(_s(info, 'medicine_type'), bg: _cardBg, fg: _muted),
               rx == true
                   ? _pchip(
-                      'Rx — Prescription required',
+                      'Rx - Prescription required',
                       bg: _amberSoft,
                       fg: _amber,
                     )
-                  : _pchip('OTC — No prescription', bg: _tealSoft, fg: _teal),
+                  : _pchip('OTC - No prescription', bg: _tealSoft, fg: _teal),
               if (antibiotic == true)
                 _pchip('Antibiotic', bg: _amberSoft, fg: _amber),
               if (controlled == true)
                 _pchip('Controlled drug', bg: _redSoft, fg: _red),
               if (narcotic == true)
-                _pchip('Narcotic — restricted', bg: _redSoft, fg: _red),
+                _pchip('Narcotic - restricted', bg: _redSoft, fg: _red),
             ],
           ),
           const SizedBox(height: 14),
@@ -971,14 +971,14 @@ class _ProductPreviewCardState extends State<ProductPreviewCard>
           _s(info, 'price_per_unit', '₹${sellPrice.toStringAsFixed(2)}'),
         ),
         _kv(
-          'PTR — price to retailer',
+          'PTR - price to retailer',
           _s(
             info,
             'ptr',
             mrp > 0 ? '₹${sellPrice.toStringAsFixed(2)}' : 'Not available',
           ),
         ),
-        _kv('PTS — price to stockist (est.)', _s(info, 'pts')),
+        _kv('PTS - price to stockist (est.)', _s(info, 'pts')),
         _kv(
           'Your margin at MRP',
           mrp > 0 ? '${margin.toStringAsFixed(1)}%' : 'Not available',

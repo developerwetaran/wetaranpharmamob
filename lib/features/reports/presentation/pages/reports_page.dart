@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wetaran_pharma/core/widgets/reusable_pharma_header.dart';
 import 'package:wetaran_pharma/features/orders/models/pharma_cart_provider.dart';
 import 'package:wetaran_pharma/features/orders/presentation/widgets/pharma_cart_sheet.dart';
@@ -16,88 +20,6 @@ const amberSoft = Color(0xFFFFEDD5);
 const amber = Color(0xFFD97706);
 const redSoft = Color(0xFFFEE2E2);
 const red = Color(0xFFDC2626);
-
-Widget buildShellHeader({
-  required String title,
-  required VoidCallback onOpenDrawer,
-}) {
-  return Container(
-    width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [kBlue, kBlueDk, Color(0xFF06304F)],
-      ),
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        GestureDetector(
-          onTap: onOpenDrawer,
-          child: Container(
-            width: 38,
-            height: 38,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(.13),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.menu_rounded,
-              size: 19,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        GestureDetector(
-          onTap: () {},
-          child: Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(.13),
-              shape: BoxShape.circle,
-            ),
-            child: Stack(
-              children: [
-                const Center(
-                  child: Icon(
-                    Icons.notifications_outlined,
-                    size: 18,
-                    color: Colors.white,
-                  ),
-                ),
-                Positioned(
-                  top: 9,
-                  right: 10,
-                  child: Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFB13D),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
 
 Widget appCard({
   required Widget child,
@@ -131,77 +53,422 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
-  final List<_TrendItem> monthlyTrend = const [
-    _TrendItem(month: 'Feb', value: 2.6, heightFactor: 0.52),
-    _TrendItem(month: 'Mar', value: 2.9, heightFactor: 0.58),
-    _TrendItem(month: 'Apr', value: 3.1, heightFactor: 0.62),
-    _TrendItem(month: 'May', value: 3.2, heightFactor: 0.64),
-    _TrendItem(month: 'Jun', value: 3.4, heightFactor: 0.68),
-    _TrendItem(month: 'Jul', value: 3.8, heightFactor: 0.76, highlight: true),
-  ];
+  final SupabaseClient _supabase = Supabase.instance.client;
 
-  final List<_DistributorItem> distributors = const [
-    _DistributorItem(
-      name: 'Mahavir Pharma Distributors',
-      value: '₹1.72L',
-      percent: 45,
-      color: Color(0xFF0FA3A3),
-    ),
-    _DistributorItem(
-      name: 'Shree Sai Medico Agencies',
-      value: '₹1.15L',
-      percent: 30,
-      color: kBlue,
-    ),
-    _DistributorItem(
-      name: 'Lifeline Pharma Agency',
-      value: '₹0.73L',
-      percent: 19,
-      color: amber,
-    ),
-    _DistributorItem(
-      name: 'Others',
-      value: '₹0.24L',
-      percent: 6,
-      color: Color(0xFF7FB2D9),
-    ),
-  ];
+  bool _loading = true;
+  String? _error;
+  String? _pharmaUserId;
 
-  final List<_FastMoverItem> fastMovers = const [
-    _FastMoverItem(name: 'Dolo 650', qty: '140 strips', spend: '₹3,794'),
-    _FastMoverItem(name: 'Pan 40', qty: '95 strips', spend: '₹9,120'),
-    _FastMoverItem(name: 'Telma 40', qty: '80 strips', spend: '₹8,560'),
-    _FastMoverItem(
-      name: 'Augmentin 625 Duo',
-      qty: '60 strips',
-      spend: '₹12,270',
-    ),
-  ];
+  List<_TrendItem> _monthlyTrend = [];
+  List<_DistributorItem> _distributors = [];
+  List<_FastMoverItem> _fastMovers = [];
+  List<_SavingItem> _savings = [];
 
-  final List<_SavingItem> savings = const [
-    _SavingItem(
-      title: 'Saved via distributor comparison',
-      value: '₹2,140',
-      progress: 0.70,
-      color: Color(0xFF0FA3A3),
-    ),
-    _SavingItem(
-      title: 'Scheme benefits captured',
-      value: '₹1,380',
-      progress: 0.45,
-      color: kBlue,
-    ),
-    _SavingItem(
-      title: 'Cashback earned',
-      value: '₹412',
-      progress: 0.14,
-      color: amber,
-    ),
-  ];
+  String _currentMonthLabel = DateFormat('MMMM').format(DateTime.now());
+  String _totalAdvantage = '₹0';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReports();
+  }
+
+  void _log(String message) {
+    debugPrint('[ReportsPage] $message');
+  }
+
+  Future<void> _loadReports() async {
+    if (!mounted) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      _log('1. loadReports started');
+
+      final authUser = _supabase.auth.currentUser;
+      final authUserId = authUser?.id;
+      _log('2. auth user id = $authUserId');
+
+      if (authUserId == null) {
+        throw Exception('No logged-in user found');
+      }
+
+      final pharmaProfile = await _supabase
+          .from('pharma_users')
+          .select('id')
+          .eq('auth_user_id', authUserId)
+          .maybeSingle();
+
+      _log('3. pharma profile = $pharmaProfile');
+
+      if (pharmaProfile == null) {
+        throw Exception('Pharma user profile not found');
+      }
+
+      final pharmaUserId = (pharmaProfile['id'] ?? '').toString();
+      _log('4. pharma user id = $pharmaUserId');
+
+      if (pharmaUserId.isEmpty) {
+        throw Exception('Invalid pharma user id');
+      }
+
+      final rows = await _supabase
+          .from('orders')
+          .select('''
+      id,
+      order_id,
+      total_amount,
+      status,
+      status,
+      order_date,
+      notes,
+      products,
+      distributor:distributor_id (
+        id,
+        company_name,
+        company_phone,
+        company_email,
+        contact_name,
+        contact_phone,
+        contact_email,
+        gstin,
+        drug_license_no,
+        registered_office_address,
+        warehouse_address,
+        partner_type,
+        status,
+        is_active,
+        service_coverage,
+        pharma_expected_delivery,
+        pharma_same_day_order_cutoff
+      )
+    ''')
+          .eq('pharma_user_id', pharmaUserId)
+          .inFilter('status', ['Approved', 'Delivered', 'Dispatched'])
+          .order('order_date', ascending: false);
+
+      final orders = List<Map<String, dynamic>>.from(rows);
+      _log('5. orders fetched = ${orders.length}');
+
+      final now = DateTime.now();
+      _currentMonthLabel = DateFormat('MMMM').format(now);
+
+      final trend = _buildMonthlyTrend(orders, now);
+      final distributorSplit = _buildDistributorSplit(orders, now);
+      final fastMovers = _buildFastMovers(orders, now);
+      final savings = _buildSavings(orders, now);
+
+      final totalAdvantageValue = savings.fold<double>(
+        0,
+        (sum, item) => sum + item.rawValue,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _pharmaUserId = pharmaUserId;
+        _monthlyTrend = trend;
+        _distributors = distributorSplit;
+        _fastMovers = fastMovers;
+        _savings = savings;
+        _totalAdvantage = _formatMoney(totalAdvantageValue);
+        _loading = false;
+      });
+
+      _log('6. state updated successfully');
+    } catch (e, st) {
+      _log('ERROR = $e');
+      debugPrintStack(label: 'REPORTS_STACK', stackTrace: st);
+
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  List<_TrendItem> _buildMonthlyTrend(
+    List<Map<String, dynamic>> orders,
+    DateTime now,
+  ) {
+    final monthStarts = List<DateTime>.generate(6, (index) {
+      final m = DateTime(now.year, now.month - 5 + index, 1);
+      return DateTime(m.year, m.month, 1);
+    });
+
+    final Map<String, double> totals = {
+      for (final month in monthStarts) _monthKey(month): 0,
+    };
+
+    for (final order in orders) {
+      final orderDate = _parseDate(order['order_date']);
+      if (orderDate == null) continue;
+
+      final key = _monthKey(DateTime(orderDate.year, orderDate.month, 1));
+      if (!totals.containsKey(key)) continue;
+
+      totals[key] = (totals[key] ?? 0) + _toDouble(order['total_amount']);
+    }
+
+    final maxValue = totals.values.fold<double>(0, math.max);
+    final safeMax = maxValue <= 0 ? 1.0 : maxValue;
+
+    return monthStarts.map((month) {
+      final key = _monthKey(month);
+      final amount = totals[key] ?? 0;
+      final lakhs = amount / 100000;
+      final heightFactor = amount <= 0
+          ? 0.12
+          : (amount / safeMax).clamp(0.18, 1.0);
+
+      final isCurrentMonth = month.year == now.year && month.month == now.month;
+
+      return _TrendItem(
+        month: DateFormat('MMM').format(month),
+        value: lakhs,
+        heightFactor: heightFactor,
+        highlight: isCurrentMonth,
+      );
+    }).toList();
+  }
+
+  List<_DistributorItem> _buildDistributorSplit(
+    List<Map<String, dynamic>> orders,
+    DateTime now,
+  ) {
+    final Map<String, double> totalsByDistributor = {};
+
+    double monthTotal = 0;
+
+    for (final order in orders) {
+      final orderDate = _parseDate(order['order_date']);
+      if (orderDate == null) continue;
+
+      if (orderDate.year != now.year || orderDate.month != now.month) {
+        continue;
+      }
+
+      final distributorMap = order['distributor'] is Map
+          ? Map<String, dynamic>.from(order['distributor'] as Map)
+          : <String, dynamic>{};
+
+      final distributorName = (distributorMap['company_name'] ?? 'Distributor')
+          .toString();
+
+      final totalAmount = _toDouble(order['total_amount']);
+
+      totalsByDistributor[distributorName] =
+          (totalsByDistributor[distributorName] ?? 0) + totalAmount;
+
+      monthTotal += totalAmount;
+    }
+
+    if (totalsByDistributor.isEmpty || monthTotal <= 0) {
+      return [];
+    }
+
+    final sorted = totalsByDistributor.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    const colors = [
+      Color(0xFF0FA3A3),
+      kBlue,
+      amber,
+      Color(0xFF7FB2D9),
+      green,
+      red,
+    ];
+
+    return sorted.asMap().entries.map((entry) {
+      final index = entry.key;
+      final item = entry.value;
+      final percent = ((item.value / monthTotal) * 100).round();
+
+      return _DistributorItem(
+        name: item.key,
+        value: _formatCompactLakh(item.value),
+        percent: percent,
+        color: colors[index % colors.length],
+      );
+    }).toList();
+  }
+
+  List<_FastMoverItem> _buildFastMovers(
+    List<Map<String, dynamic>> orders,
+    DateTime now,
+  ) {
+    final Map<String, int> qtyByMedicine = {};
+    final Map<String, double> spendByMedicine = {};
+
+    for (final order in orders) {
+      final orderDate = _parseDate(order['order_date']);
+      if (orderDate == null) continue;
+
+      if (orderDate.year != now.year || orderDate.month != now.month) {
+        continue;
+      }
+
+      final products = order['products'] as List? ?? [];
+
+      for (final raw in products) {
+        if (raw is! Map) continue;
+        final p = Map<String, dynamic>.from(raw);
+
+        final name = _productName(p);
+        final qty = _productQty(p);
+        final total = _productTotal(p);
+
+        qtyByMedicine[name] = (qtyByMedicine[name] ?? 0) + qty;
+        spendByMedicine[name] = (spendByMedicine[name] ?? 0) + total;
+      }
+    }
+
+    final medicines = qtyByMedicine.keys.toList()
+      ..sort(
+        (a, b) => (qtyByMedicine[b] ?? 0).compareTo(qtyByMedicine[a] ?? 0),
+      );
+
+    return medicines.take(6).map((name) {
+      final qty = qtyByMedicine[name] ?? 0;
+      final spend = spendByMedicine[name] ?? 0.0;
+
+      return _FastMoverItem(
+        name: name,
+        qty: '$qty units',
+        spend: _formatMoney(spend),
+      );
+    }).toList();
+  }
+
+  List<_SavingItem> _buildSavings(
+    List<Map<String, dynamic>> orders,
+    DateTime now,
+  ) {
+    double monthSpend = 0;
+    double comparisonSavings = 0;
+    double schemeSavings = 0;
+    double cashback = 0;
+
+    for (final order in orders) {
+      final orderDate = _parseDate(order['order_date']);
+      if (orderDate == null) continue;
+
+      if (orderDate.year != now.year || orderDate.month != now.month) {
+        continue;
+      }
+
+      final orderTotal = _toDouble(order['total_amount']);
+      monthSpend += orderTotal;
+      cashback += orderTotal * 0.01;
+
+      final products = order['products'] as List? ?? [];
+      for (final raw in products) {
+        if (raw is! Map) continue;
+        final p = Map<String, dynamic>.from(raw);
+
+        final qty = _productQty(p);
+        final ptr = _toDouble(p['ptr']);
+        final sell = _toDouble(
+          p['sell_price_to_retailer'] ?? p['price_per_unit'],
+        );
+
+        if (sell > ptr && qty > 0) {
+          comparisonSavings += (sell - ptr) * qty;
+        }
+
+        final lineTotal = _productTotal(p);
+        schemeSavings += lineTotal * 0.03;
+      }
+    }
+
+    final safeBase = monthSpend <= 0 ? 1.0 : monthSpend;
+
+    return [
+      _SavingItem(
+        title: 'Saved via distributor comparison',
+        value: _formatMoney(comparisonSavings),
+        rawValue: comparisonSavings,
+        progress: (comparisonSavings / safeBase).clamp(0.0, 1.0),
+        color: const Color(0xFF0FA3A3),
+      ),
+      _SavingItem(
+        title: 'Scheme benefits captured',
+        value: _formatMoney(schemeSavings),
+        rawValue: schemeSavings,
+        progress: (schemeSavings / safeBase).clamp(0.0, 1.0),
+        color: kBlue,
+      ),
+      _SavingItem(
+        title: 'Cashback earned',
+        value: _formatMoney(cashback),
+        rawValue: cashback,
+        progress: (cashback / safeBase).clamp(0.0, 1.0),
+        color: amber,
+      ),
+    ];
+  }
+
+  String _monthKey(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+  }
+
+  double _toDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
+  }
+
+  DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value.toLocal();
+    return DateTime.tryParse(value.toString())?.toLocal();
+  }
+
+  int _productQty(Map<String, dynamic> p) {
+    final dynamic qty = p['quantity'] ?? p['qty'] ?? 0;
+    if (qty is int) return qty;
+    if (qty is double) return qty.toInt();
+    return int.tryParse(qty.toString()) ?? 0;
+  }
+
+  double _productTotal(Map<String, dynamic> p) {
+    final dynamic total =
+        p['line_total'] ?? p['order_price'] ?? p['total_price'] ?? 0;
+    if (total is num) return total.toDouble();
+    return double.tryParse(total.toString()) ?? 0;
+  }
+
+  String _productName(Map<String, dynamic> p) {
+    return (p['product_name'] ?? p['name'] ?? p['medicine_name'] ?? '-')
+        .toString();
+  }
+
+  String _formatMoney(num value) {
+    return NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    ).format(value);
+  }
+
+  String _formatCompactLakh(double value) {
+    if (value >= 100000) {
+      return '₹${(value / 100000).toStringAsFixed(2)}L';
+    }
+    if (value >= 1000) {
+      return '₹${(value / 1000).toStringAsFixed(0)}K';
+    }
+    return _formatMoney(value);
+  }
 
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<PharmaCartProvider>();
+
     return Container(
       color: pageBg,
       child: SafeArea(
@@ -218,163 +485,261 @@ class _ReportsPageState extends State<ReportsPage> {
               onCart: () => showPharmaCartSheet(context),
             ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-                children: [
-                  const Text(
-                    'Reports',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: headingColor,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    "Your pharmacy's buying, decoded. Data from platform orders only.",
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: mutedColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  appCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Monthly purchase trend (₹ in lakh)',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: headingColor,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          height: 180,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: monthlyTrend
-                                .map((item) => Expanded(child: _buildBar(item)))
-                                .toList(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  appCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Purchase by distributor — July',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: headingColor,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ...distributors.map(_buildDistributorRow),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  appCard(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Row(
-                            children: const [
-                              Expanded(
-                                flex: 42,
-                                child: Text(
-                                  'Fast movers — July',
-                                  style: _tableHeadStyle,
-                                ),
-                              ),
-                              Expanded(
-                                flex: 28,
-                                child: Text('Qty', style: _tableHeadStyle),
-                              ),
-                              Expanded(
-                                flex: 30,
-                                child: Text(
-                                  'Spend',
-                                  style: _tableHeadStyle,
-                                  textAlign: TextAlign.right,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Divider(height: 1, color: borderColor),
-                        ...fastMovers.map(_buildFastMoverRow),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  appCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Savings snapshot — July',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: headingColor,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ...savings.map(_buildSavingsRow),
-                        const SizedBox(height: 10),
-                        RichText(
-                          text: const TextSpan(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                  ? _buildErrorState()
+                  : RefreshIndicator(
+                      onRefresh: _loadReports,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+                        children: [
+                          const Text(
+                            'Reports',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: mutedColor,
-                              height: 1.45,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: headingColor,
                             ),
-                            children: [
-                              TextSpan(text: 'Total July advantage: '),
-                              TextSpan(
-                                text: '₹3,932',
-                                style: TextStyle(
-                                  color: green,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              TextSpan(
-                                text: ' versus buying without comparison.',
-                              ),
-                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          const Text(
+                            "Your pharmacy's buying, decoded. Data from platform orders only.",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: mutedColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          appCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Monthly purchase trend (₹ in lakh)',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: headingColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                SizedBox(
+                                  height: 180,
+                                  child: _monthlyTrend.isEmpty
+                                      ? const Center(
+                                          child: Text(
+                                            'No monthly trend data found.',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              color: mutedColor,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        )
+                                      : Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: _monthlyTrend
+                                              .map(
+                                                (item) => Expanded(
+                                                  child: _buildBar(item),
+                                                ),
+                                              )
+                                              .toList(),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          appCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Purchase by distributor - $_currentMonthLabel',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: headingColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                if (_distributors.isEmpty)
+                                  const Text(
+                                    'No distributor purchase data found for this month.',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: mutedColor,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  )
+                                else
+                                  ..._distributors.map(_buildDistributorRow),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          appCard(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 42,
+                                        child: Text(
+                                          'Fast movers - $_currentMonthLabel',
+                                          style: _tableHeadStyle,
+                                        ),
+                                      ),
+                                      const Expanded(
+                                        flex: 28,
+                                        child: Text(
+                                          'Qty',
+                                          style: _tableHeadStyle,
+                                        ),
+                                      ),
+                                      const Expanded(
+                                        flex: 30,
+                                        child: Text(
+                                          'Spend',
+                                          style: _tableHeadStyle,
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Divider(height: 1, color: borderColor),
+                                if (_fastMovers.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 16),
+                                    child: Text(
+                                      'No fast mover data found for this month.',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: mutedColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  ..._fastMovers.map(_buildFastMoverRow),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          appCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Savings snapshot - $_currentMonthLabel',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: headingColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                ..._savings.map(_buildSavingsRow),
+                                //const SizedBox(height: 10),
+                                /*
+                                RichText(
+                                  text: TextSpan(
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: mutedColor,
+                                      height: 1.45,
+                                    ),
+                                    children: [
+                                      const TextSpan(
+                                        text: 'Total monthly advantage: ',
+                                      ),
+                                      TextSpan(
+                                        text: _totalAdvantage,
+                                        style: const TextStyle(
+                                          color: green,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const TextSpan(
+                                        text:
+                                            ' versus buying without comparison.',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                */
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        appCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Unable to load reports',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: headingColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error ?? 'Unknown error',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: mutedColor,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton(
+                onPressed: _loadReports,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kBlue,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -387,7 +752,7 @@ class _ReportsPageState extends State<ReportsPage> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Text(
-            item.value.toString(),
+            item.value.toStringAsFixed(1),
             style: TextStyle(
               fontSize: 10.5,
               color: item.highlight ? amber : kBlue,
@@ -489,7 +854,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 child: Text(
                   item.name,
                   style: const TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                     color: headingColor,
                   ),
@@ -616,12 +981,14 @@ class _SavingItem {
   final String value;
   final double progress;
   final Color color;
+  final double rawValue;
 
   const _SavingItem({
     required this.title,
     required this.value,
     required this.progress,
     required this.color,
+    required this.rawValue,
   });
 }
 
